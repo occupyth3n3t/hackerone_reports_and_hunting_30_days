@@ -25,8 +25,11 @@ Steps to Reproduce
     Send the modified request and observe the response.
     The victim’s email address is now successfully verified.
 
-Number: #3269777
-ID: Replayable Password Change Request Across Sessions.
+Number: three
+ID:  #3269777
+Title: Replayable Password Change Request Across Sessions.
+The report describes a vulnerability in the password change endpoint (PUT /authentication/password) that allows for replay attacks. An attacker who captures a valid password change request can reuse the exact same request later, even from a different session or device, to reset the password again. This vulnerability persists across session renewals and does not require fresh CSRF tokens, timestamps, or other anti-replay mechanisms.
+
 
 
 
