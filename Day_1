@@ -1,1 +1,37 @@
+Number: one
+ID: #3219944
+Title:IDOR - Scheduled data leak to other accounts By "projectID"
+
+An Insecure Direct Object Reference (IDOR) vulnerability was discovered in the GetNotebookScheduledPaginatedJobs endpoint on backend.singlestore.com. By modifying the projectID parameter in API requests, an authenticated user could access scheduled job information belonging to other users' projects. The API failed to verify whether the requestor had permission to access the specified project.
+The vulnerability exposed sensitive information including database names, notebook paths, scheduling details, and infrastructure information. While exploitation required knowledge of valid project IDs, which limited the practical impact, the issue still represented an authorization bypass warranting remediation.
+
+
+Number: two
+ID: #3020733
+Title:IDOR - Email Verification Bypass via Race Condition
+
+Steps to Reproduce
+    Create an account using an attacker email: sijojohnson+attacker@wearehackerone.com.
+    Verify the account.
+    Go to account settings and update the email address to sijojohnson+attacker2@wearehackerone.com.
+    Capture the request using a tool like Burp Suite.
+    Send the request to Repeater twice and forward the request.
+    In Repeater, modify Request 1 by changing the email to the victim's email (e.g., sijojohnson+victim@wearehackerone.com).
+    In Request 2, use the attacker's email (sijojohnson+attacker2@wearehackerone.com).
+    Group both requests, select Send Group in Parallel, and send the requests.
+    Observe the email inbox—both the victim's and attacker's email addresses will receive the same OTP.
+    Go to confirmation page displayed, Enter the OTP (both OTP's are same),
+    Capture the request, and replace the email with the victim’s email.
+    Send the modified request and observe the response.
+    The victim’s email address is now successfully verified.
+
+Number: #3269777
+ID: Replayable Password Change Request Across Sessions.
+
+
+
+
+
+
+
 
