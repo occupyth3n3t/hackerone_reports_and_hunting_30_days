@@ -1,4 +1,4 @@
-Number: one
+Number: 1
 ID: #3219944
 Title:IDOR - Scheduled data leak to other accounts By "projectID"
 
@@ -6,7 +6,7 @@ An Insecure Direct Object Reference (IDOR) vulnerability was discovered in the G
 The vulnerability exposed sensitive information including database names, notebook paths, scheduling details, and infrastructure information. While exploitation required knowledge of valid project IDs, which limited the practical impact, the issue still represented an authorization bypass warranting remediation.
 
 
-Number: two
+Number: 2
 ID: #3020733
 Title:IDOR - Email Verification Bypass via Race Condition
 
@@ -25,7 +25,7 @@ Steps to Reproduce
     Send the modified request and observe the response.
     The victim’s email address is now successfully verified.
 
-Number: three
+Number: 3
 ID:  #3269777
 Title: Replayable Password Change Request Across Sessions.
 
@@ -41,13 +41,28 @@ From Burp Repeater, replay the exact same password change request captured in St
 Observe that the request succeeds and the password is changed, even though it originated from a different session, after the old session was logged out, and reused the exact same body and headers.
 A video recording (Recording_2025-07-24_154829.mp4) was provided as proof of concept.
 
-Number: Four
+Number: F4
 ID: #1874836
 Title: Rails Debug Mode Enabled On ( https://44.208.145.207/testrail/files.md5)
 
 Ruby on Rails web application running in development mode has been identified on a Malwarebytes server at https://44.208.145.207/testrail/files.md5. Running Rails in development mode exposes sensitive system information that should not be accessible in a production environment. This includes information about middleware components and application root paths that could be leveraged by attackers.
 
+Number: 5
+ID: #2855610
+Title: Staff with Restricted Permissions Could Access Customer Data After Company Removal
+During my research on admin.shopify.com, I discovered that if a customer is associated with a specific company and places an order for that company, but is later removed from the company, staff with restricted company permissions can still access and update the customer's information.
 
+Steps To Reproduce:
+
+    Visit partner dashboard
+    Create development store or use existing one.
+    Login to admin.shopify.com.
+    Invite staff member and assign them Companies > View, Restrict permissions to assigned company locations and customers permissions.
+    Create a company and assign a customer to this company.
+    Create an order for the company created in step 5 from the customer's account.
+    Remove the customer from that company.
+    Try to place a personal order with different shipping address for the customer.
+    Visit the staff member account's customer tab and see the customer is still present with updated shipping address and is able to manage their personal information as well.
 
 
 
