@@ -28,9 +28,18 @@ Steps to Reproduce
 Number: three
 ID:  #3269777
 Title: Replayable Password Change Request Across Sessions.
+
 The report describes a vulnerability in the password change endpoint (PUT /authentication/password) that allows for replay attacks. An attacker who captures a valid password change request can reuse the exact same request later, even from a different session or device, to reset the password again. This vulnerability persists across session renewals and does not require fresh CSRF tokens, timestamps, or other anti-replay mechanisms.
+Steps to Reproduce
 
-
+Log in as a user in Browser A using valid credentials.
+Intercept the password change request in Burp Suite.
+Send the captured request to Burp Repeater and save it for later use.
+Logout from Browser A; attempting to replay the request shows "isAuth:False".
+Log in again as the same user in another Browser B.
+From Burp Repeater, replay the exact same password change request captured in Step 3.
+Observe that the request succeeds and the password is changed, even though it originated from a different session, after the old session was logged out, and reused the exact same body and headers.
+A video recording (Recording_2025-07-24_154829.mp4) was provided as proof of concept.
 
 
 
