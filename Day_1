@@ -41,6 +41,15 @@ From Burp Repeater, replay the exact same password change request captured in St
 Observe that the request succeeds and the password is changed, even though it originated from a different session, after the old session was logged out, and reused the exact same body and headers.
 A video recording (Recording_2025-07-24_154829.mp4) was provided as proof of concept.
 
+Number: Four
+ID: #1874836
+Title: Rails Debug Mode Enabled On ( https://44.208.145.207/testrail/files.md5)
+
+Ruby on Rails web application running in development mode has been identified on a Malwarebytes server at https://44.208.145.207/testrail/files.md5. Running Rails in development mode exposes sensitive system information that should not be accessible in a production environment. This includes information about middleware components and application root paths that could be leveraged by attackers.
+
+
+
+
 
 
 
