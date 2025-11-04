@@ -64,6 +64,118 @@ Steps To Reproduce:
     Try to place a personal order with different shipping address for the customer.
     Visit the staff member account's customer tab and see the customer is still present with updated shipping address and is able to manage their personal information as well.
 
+Number: 5
+ID: #2855610
+Title: Staff with Restricted Permissions Could Access Customer Data After Company Removal
+During my research on admin.shopify.com, I discovered that if a customer is associated with a specific 
+company and places an order for that company, but is later removed from the company, staff with restricted 
+company permissions can still access and update the customer's information.
+
+Steps To Reproduce:
+
+    Visit partner dashboard
+    Create development store or use existing one.
+    Login to admin.shopify.com.
+    Invite staff member and assign them Companies > View, Restrict permissions to assigned company locations and customers permissions.
+    Create a company and assign a customer to this company.
+    Create an order for the company created in step 5 from the customer's account.
+    Remove the customer from that company.
+    Try to place a personal order with different shipping address for the customer.
+    Visit the staff member account's customer tab and see the customer is still present with updated shipping address 
+    and is able to manage their personal information as well.
+
+Number: 6
+ID: #3185001
+Title: Order More Than Maximum Allowed Quantity
+
+A business logic vulnerability allowed users to bypass product quantity limits (1-20 items) through parameter manipulation. 
+While the UI enforced these limits, server-side validation was missing.
+
+Number: 7
+ID: #3228888
+Title: Account Takeover in Password Reset Function
+
+A critical authentication bypass vulnerability was present in the password reset functionality of the ███████
+website at ███████. The vulnerability allowed attackers to take over any user account without requiring 
+access to the victim's phone number or the one-time password (OTP) sent via SMS. The security flaw existedin the 
+implementation of the "Forgot Password" feature, where the system was designed to send an OTP to a user's registered 
+phone number for verification before allowing password reset. However, the vulnerability arose from inadequate server-side 
+validation that relied on client-side responses to determine the success of OTP verification. An attacker could intercept the 
+server response using a proxy tool and manipulate the response parameters to bypass the OTP verification step entirely. By changing 
+the response status from failure to success and modifying the JSON response body, the attacker could proceed to set a new password for
+the victim's account without ever receiving or entering the legitimate OTP. This vulnerability was assigned a CVSS score of 9.6 
+(Critical) and represented a complete failure of the authentication mechanism designed to protect user accounts during the password 
+reset process.
+
+Number: 8
+ID: #2130385
+Title: Unauthorized Blogs Creation
+
+An unauthorized blog creation vulnerability has been identified on the lichess.org . 
+By manipulating certain request and leveraging the session cookies of a different account, 
+an attacker can bypass account-specific limitations and create a blog post on an account that is not yet eligible to do so.
+
+Number: 8
+ID: #2130385
+Title: Unauthorized Blogs Creation
+
+Steps to reproduce:
+    1.Open a new account  and attempt to create a blog post, you will face this message below.
+
+    2.Log in with a different browser and  an old account that has the ability to create blog posts , 
+    go to create some blog with test data and solve the capatcha, but before click save fire up the burp suite, 
+    catch the request and send it to repeater and then drop it
+
+    3.Here ,I Replaced the cookies in the request with the cookeis of  the new account ,I clicked send and response be like:
+
+    4.I coppied the location url and I visited it  in the browser while logged in with the new account.
+    https://lichess.org/[The Location Header]
+
+    5.You can see that as a new account we are able to edit the content and submit the form
+
+    6.Verify that the unauthorized blog post is successfully created in the new account
+
+
+
+Number: 9
+ID: #3250315
+Title: .8x8.vc/index.js: Exposed Google Maps API Key Allowing Potential Abuse of Paid Services
+
+We resolved an issue where a Google Maps API key allowed potential unauthorized access to some Google Maps services.
+While the API key was intentionally included in client-side code, it lacked proper restrictions to prevent abuse of paid services. 
+The potential impact could theoretically lead to API quota consumption and related billing concerns, though actual impact was limited
+as no evidence of exploitation was found. Our team promptly validated and addressed the report by implementing appropriate API key 
+restrictions where feasible,while accepting other known limitations.
+
+Number: 10
+ID: #3221185
+Title: Exceed the maximum number of subscribers using Race Condition 
+
+A race condition vulnerability was discovered in the SingleStore control panel that allowed bypassing the maximum limit of five 
+subscribers for alerts. By sending multiple concurrent POST requests to the CreateAlertReceivers endpoint with different 
+email addresses, an unlimited number of subscribers could be added despite the UI displaying a restriction message.
+The vulnerability was validated, triaged, and assigned a Low severity rating by the SingleStore security team.
+The issue has been patched and deployed to production.
+
+Number: 11
+ID: #3219944
+Title: IDOR - Scheduled data leak to other accounts By "projectID"
+
+An Insecure Direct Object Reference (IDOR) vulnerability was discovered in the GetNotebookScheduledPaginatedJobs
+endpoint on backend.singlestore.com. By modifying the projectID parameter in API requests, an authenticated user 
+could access scheduled job information belonging to other users' projects. The API failed to verify whether the
+requestor had permission to access the specified project. The vulnerability exposed sensitive information including 
+database names, notebook paths, scheduling details, and infrastructure information. While exploitation required knowledge 
+of valid project IDs, which limited the practical impact, the issue still represented an authorization bypass warranting remediation.
+This medium-severity issue has been patched by implementing proper authorization checks.
+
+
+
+
+
+
+
+
 
 
 
