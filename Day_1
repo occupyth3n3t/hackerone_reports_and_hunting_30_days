@@ -170,7 +170,38 @@ of valid project IDs, which limited the practical impact, the issue still repres
 This medium-severity issue has been patched by implementing proper authorization checks.
 
 
+Number: 12
+ID: https://x.com/the_IDORminator/status/1985517267191255431
+Title: IDOR - Let's do interactive #bugbounty learning.  Path-based IDORs. Fun!
 
+You visit a webpage with your browser, which should be Firefox, at https://www[.]place[.]com/user/12345.  
+
+The webpage forces a client request to
+https://api[.]place[.]com/api/v3/users/12345
+
+This request responds with JSON about that user, to populate into your Firefox web browser.  Its sensitive PII.
+
+Let me break down my thought process here.
+1] The first thing I do with this in less than 5 seconds, is try the number 12344 in the path. Iterate a bit, make sure you get 401/403s back.  If not, you probably are looking at someone else's PII.  Yay, GG.
+
+2]  I try to change the path to /v1/, /v2/, /v4/.  Remove it entirely too. Sometimes different API versions are less secure.  Those still in development, older ones, etc.
+
+3] Then I run parameters at the end like ../api/v3/users/12345?userId=12344. 
+I try every parameter from the JSON response(s). Did the response change? If it changed the parameter did something. Investigate. (Intruder here)
+
+4] I search JS files for "/api/v3/users" or keywords in the path to find where and how the API path was built, or where there may be other API paths. This is usually in the JS.  Sometimes there are deprecated, hidden, or admin APIs laying there.   Then I try all of those. Pivot pivot pivot. 
+
+5] I usually try appending ?, /, #, and/or URL encoded versions of each of these to the end of the API path. Sometimes that results in a bypass. One time I bypassed the security on thousands of APIs using a trailing slash due to ... well... bad code. This trick also works good when the mitigation was a WAF block.
+
+6] Traverse backwards down the API. Check /api/v3/users/, /api/v3/, /api/, -- fuzz for obvious swagger or API schema paths. Add extra slashes, it looks cool. ///api//v3//users///// . Who knows right?
+
+7] Throw a single quote in there, /12345'.  Did it blow up? Add another quote in there, /12345'' - did it un-blow up? Might be SQLi.  Don't try XSS, XSS is stupid.
+
+8] Fuzz the words "users". What else could be there? 
+
+9] Sometimes APIs reserve keywords, like "ALL".  Try things like /users/all instead of /users/12345.  Run the US Websters Dictionary through that path.  Watch case sensitivity, if it uses lower, its probably always lower.  So dont send uppercase stuff to a lowercase API. 
+
+10] If none of this worked, I'm probably on another API at this point. Less than 10 minutes gone. 
 
 
 
