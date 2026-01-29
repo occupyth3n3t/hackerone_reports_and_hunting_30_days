@@ -970,8 +970,190 @@ POST /api/v1/register
 Conclusion
 Mass-assignment bugs occur when backends trust incoming JSON too much. A harmless-looking signup request can overwrite sensitive fields if filtering isn’t strict. Testing the payload variations above helps reveal how the API handles different structures and types. Once these gaps are found, enforcing allowlists and validating each field becomes straightforward. Securing the signup flow strengthens the entire application.
 
+Number: 14
+title:0-Click Account Takeover Through a Simple Password Reset Parameter
+id: writeup
+
+But when I tried with a random email like testhehhhehe@gmail.com, the application replied:
+ “We couldn't find an account with that email address.”
+That’s a classic user enumeration vulnerability.
+
+Step 2: Looking closer at the reset link
+When I checked my email,
+
+https://redacted.com/reset-password?email=shiohz0test@gmail.com&token=O4AiLBPhZNvr
+
+The link had two parameters:
+
+My email address
+A reset token
+When I opened it, I got the usual “Create new password” page. Nothing surprising so far.
 
 
+Step 3: Just a small experiment
+I decided to try something simple.
+
+Become a member
+I requested another reset link for the same email (shiohz0test@gmail.com). Once I received the fresh 
+link with new token , I opened it but changed only one thing the email id in the URL. Instead of my 
+original email, I swapped it with another test account I owned:
+
+https://redacted.com/reset-password?email=testshiozhy@gmail.com&token=sYrUIKzYt46
+And boom!
+The page loaded perfectly, and it allowed me to reset the password of testshiozhy@gmail.com.
+Remember: I had never requested a reset for this second account.
+The application was making a huge mistake. It trusted the email parameter directly from the URL and did 
+not validate whether the reset token truly belonged to that email. This mismatch allowed me to reset the
+password of another user without their involvement
+
+So with just one token (that I got for my own 
+
+Number : 14 
+title: Publicly Exposed RAG API Leading to Unauthenticated Access to PII and Internal System Data
+id: writeup
+
+Discovery Through Shodan
+Shodan often reveals systems that organizations may not realize are exposed. While searching 
+for common patterns related to development servers and machine learning pipelines, one specific
+IP caught my eye because port 8081 was showing an active HTTP service. The banner looked interesting 
+enough to analyze further, so I opened the address directly in a browser.
+
+I also verified the response through curl:
+curl http://[REDACTED]:8081/
+
+The moment it loaded, it displayed a message saying:
+
+{"message": "RAG Pipeline API is running"}
+This indicated the server was meant to support some form of AI-related backend workflow. 
+But more importantly, the page loaded without any authentication. This is unusual for a system that 
+appears to be part of an internal backend pipeline.
+
+At this point, the intention was still simple observation. But the lack of authentication hinted there 
+could be more exposed behind the scenes.
+
+Finding the OpenAPI Documentation
+Many modern APIs include an automatically generated documentation file often exposed at /openapi.json or /swagger.json.While testing standard API documentation paths, /openapi.json responded with 200, exposing the entire API structure.
+
+On this server, visiting:
+
+http://[REDACTED]:8081/openapi.json
+returned the complete OpenAPI specification.
+
+This file alone contained hundreds of lines describing every endpoint, method, parameter, request structure, and expected response. It was effectively a full map of the system, including internal administrative routes.
+
+The fact that this documentation was left publicly accessible already showed that the system lacked even basic restrictions.
+
+Extracting All Endpoints
+To better understand the API surface, I extracted all the paths from the OpenAPI file.
+
+curl -s http://[REDACTED]:8081/openapi.json | jq '.paths | keys[]'
+And then cleaned the output:
+
+curl -s http://[REDACTED]:8081/openapi.json | jq -r '.paths | keys[]'
+The result was a very large set of routes covering everything from authentication and dashboards
+to file management and user details.
+
+What stood out immediately was that the API was not just for a specific module. It included customer
+and lead management, employee operations,
+device tracking, dashboard analytics, file uploads and downloads, session controls, system and server status,
+GDPR-related features, and notification systems.
+
+This was clearly a production-grade system containing real organizational data.
+
+Manual Testing of Endpoints
+With a complete list of endpoints available, the next logical step was to open a few in the browser 
+or with curl to verify whether they required authentication. Most secure systems would respond with either
+an authentication error or a redirect to a login page.
+
+However, this system responded with full JSON data.
+
+The first endpoint tested was the user listing route:
+
+curl http://[REDACTED]:8081/api/v1/users
+It immediately returned a long list of user entries containing:
+
+Full names
+Email addresses
+Mobile numbers
+User roles
+Login and logout timestamps
+Presence indicators
+Account creation times
+This was concrete, real user information belonging to employees and admins. Browsing through the data revealed dozens 
+of individuals, each with identifiable personal data. None of it was protected.
+
+Number: 15
+title: Account Takeover via IDOR in GraphQL Invitation Flow
+id:
+Lets assume the target as redacted, just like any other SaaS environment.
+
+From the UI perspective the flow was extremely simple. There was an Invite Agents button.
+I as evil.com was the owner of team and could invite agents/members in my team.
+
+Clicking it opened a modal where I could enter one or more email addresses and send invites. This is a very common feature, 
+so at this point nothing felt interesting or suspicious.
+After entering an email of victim victim1234@gmail.com and clicking Invite, I switched my focus to Burp Suite. 
+The application was using GraphQL, so instead of multiple REST endpoints everything was going through a single /graphql endpoint.
+The request being sent looked like a standard GraphQL mutation.
+
+The intercepted request looked like this:
+
+POST /graphql/ HTTP/2
+Host: redacted
+Content-Type: application/json
+{
+ "operationName":"InviteAgentsFromInviteAgentModal",
+ "query":"mutation InviteAgentsFromInviteAgentModal($emails: [String!]!) { inviteAgents(emails: $emails) 
+{ success message invitations { id email __typename } failedEmailInvitations __typename } }",
+ "variables":{
+ "emails":["victim1234@gmail.com"]
+ }
+}
+
+At first glance this looked harmless. I was simply inviting an email and the server was expected to send an 
+invitation email. But then I looked at the response.
+The server responded with the following JSON:
+
+{
+  "data": {
+    "inviteAgents": {
+      "success": true,
+      "message": "Successfully invited agents",
+      "invitations": [
+        {
+          "id": "4ffacc07efdecea45dc4a0f1c4a704e9d1",
+          "email": "victim1234@gmail.com"
+        }
+      ],
+      "failedEmailInvitations": []
+    }
+  }
+}
+
+That id immediately caught my attention. This was not just some internal identifier. 
+I had seen similar looking values before in activation links. 
+So instead of ignoring it, I copied the id and tried to understand where it was used.
+
+From previous testing experience, I knew that invited users usually activate their accounts using a 
+URL that looks something like /signup/activate/<token>. Previously I invited myself and the URL was like
+
+https://[REDACTED]/signup/activate/eb3b13efdec3415384a0f1c4a773f576
+
+So till /signup/activate/ it was static and we only need to change token. I replace the token that was received in response.
+To my surprise, this took me straight to the account activation page. The page asked me to set a name and password for the account.
+There was no requirement to click a link from the mailbox (Because we already got the token from response).
+I filled in the details and set name as hacked account and submitted the form. The account was successfully created.
+
+Press enter or click to view image in full size
+The invited email now appeared as an active agent inside my team. The display name was exactly what I had entered 
+during activation. At no point did I need access to the victim’s email inbox. Everything worked purely because the 
+application exposed the activation token in the GraphQL response and trusted that token without any additional validation.
+
+Lessons learned
+Not every ID is harmless. If an identifier can change account state, it must be treated as a secret.
+Email based flows must enforce proof of ownership on the server side, not just trust a token.
+GraphQL responses can silently leak sensitive data if fields are exposed without strict review.
+IDOR issues often appear when applications trust exposed identifiers without proper validation or scoping.
 
 
 
