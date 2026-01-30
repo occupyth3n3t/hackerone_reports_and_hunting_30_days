@@ -1391,5 +1391,61 @@ Victim’s email → removed
 Password → controlled by attacker
 Account → fully owned
 
+Number: 17
+title: The Simple Bug That Led Me to My First Bounty (Account Takeover via Insecure Reusable Activation Link)
+id: write 
+
+The Discovery Phase
+
+The vulnerability was quite simple initially, but it’s the kind of detail many people often overlook in application logic.
+
+Let’s call the target website `target.com`.
+When I created a new account, the application sent an Activation Link to my email to verify the account.
+I clicked the link, and it immediately logged me into my account.
+
+Press enter or click to view image in full size
+
+Note: I spent some time understanding the site’s overall workflow, which took me a full day due to its size and the number of 
+functions available. Understanding the Business Logic is crucial.
+
+The next day, I was ready to start testing. I created another account and received the activation link.
+I clicked it, and I was logged in immediately.
+
+My mind paused: “Why was I logged in directly? Shouldn’t the link’s sole purpose be account verification, not granting a session?”
+
+Standard Security Practice: An activation link should ideally be single-use. Its job is to change the account state from “unverified” 
+to “verified” and then it should expire immediately.
+
+Confirming the Vulnerability:
+I tried opening the exact same activation link again.
+The Surprise: It logged me into my account again!
+This was the vulnerability: Every time I opened the activation link, it granted me direct access to the account. The activation link was 
+functioning as a persistent, passwordless session token.
+
+I quickly wrote the report, highlighting that the link was reusable and automatically logged the user in.
+
+One day later, the security team responded:
+
+Press enter or click to view image in full size
+
+This response was a direct confirmation of the issue! The security team focused on the 48-hour expiration but ignored the core problem:
+
+Reusability: The link can be used more than once.
+Automatic Login: The link not only verifies but also authenticates the user.
+These two factors combined transform a simple activation link into a 48-hour Account Takeover vulnerability!
+
+Here is the summary of the follow-up I sent to clarify the security impact:
+
+Press enter or click to view image in full size
+
+After my detailed follow-up explaining the real security impact, they reopened the report and set the status to Under Review.
+
+Seven days later, the surprise came: The vulnerability was accepted, and I was rewarded!
+
+The Takeaway:
+
+Always focus on the Business Logic and how the application is supposed to work securely. Small details in the workflow often 
+lead to critical bugs. If your report is initially rejected, don’t give up — clearly articulate the Impact and the exploitation 
+scenario with logical, security-focused reasoning.
 
 
