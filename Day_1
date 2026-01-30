@@ -1155,8 +1155,241 @@ Email based flows must enforce proof of ownership on the server side, not just t
 GraphQL responses can silently leak sensitive data if fields are exposed without strict review.
 IDOR issues often appear when applications trust exposed identifiers without proper validation or scoping.
 
+Number: 15
+title: How a Simple Business Logic Flaw Caused an Account Lockout DoS
+id: writeup
+
+Hitting a Dead End in User Enumeration
+The first weird behavior that I encountered was on the registration page itself. 
+If an already registered email address was entered, a unique error message would appear,
+which gave me the idea of user enumeration. The problem was that if an email did not exist,
+the system would create a new account. If I automated this process, I could potentially end up
+creating thousands of accounts — which I’m sure actual email owners wouldn’t be too happy about
+
+Overcoming The Dead End
+Nevertheless, I started thinking of ways to enumerate users without creating a new account every 
+time an email did not exist. By default, when creating an account, a POST request was sent that 
+looked something like this:
+
+POST /Register/Username
+Host: redacted.com
+
+Email=user@gmail.com&Password=test
+
+Out of curiosity I decided to remove “/Username” and add it as a custom parameter in the body of the request:
+
+POST /Register/
+Host: redacted.com
+
+Username=Test&Email=user@gmail.com&Password=test
+
+The result was that I could create accounts with custom usernames. It wasn’t anything particularly
+important, but the fact that an account using the username “Test” was already created meant that no 
+other account could use the same username. Then I wondered — what would happen if I resent the same 
+request but changed the Email parameter to one that already exists in the system?
+
+POST /Register
+Host: redacted.com
+
+Username=Test&Email=new@gmail.com&Password=test
+
+Surprisingly, the response to this request contained only one error: that the username was already taken. 
+This meant that if an email address didn’t exist, the system would not create a new account,
+preventing the flooding issue that had been my problem before. With this, I finally had a reliable 
+way to enumerate existing accounts!
+
+Next Step
+This alone wasn’t much of a vulnerability, and I knew it had to be chained with something else to 
+raise the impact. While playing with the functionality of the application, I observed something interesting: 
+after five failed login attempts at an account, the account gets locked for several minutes, with no way for 
+the owner to unlock it until the lockout period passes. The problem was that, despite the lockout, 
+it was still possible to send invalid login attempts directly via the API, which meant the account 
+remained locked until requests stopped being sent.
+
+Account Lockout DoS
+That seemed very peculiar to me, but I assumed there would be some rate limiting in place to prevent abuse. 
+It turned out I was wrong — there was no rate limit whatsoever. In simple terms, an attacker could continuously 
+send invalid login attempts, keeping the account locked indefinitely, or at least until he decides to stop the attack.
+
+Combining Pieces
+Combined with the account enumeration issue, it was possible to identify valid email addresses and then launch a lockout 
+attack, keeping users out of their accounts with no way to log back in.
+
+Number: 16
+# How a Simple Misconfiguration in the Invitation Link Led Me to Full Account Takeover
+id: write up
+
+The Initial Discovery
+In the beginning, let’s assume the target is target.com. On this platform, you can create an organization, manage it, and 
+invite people with different permissions. What we will focus on is the Invitation Link.
+
+invitation link
+When you invite someone to your organization, you send them a link. If the user doesn’t have an account, 
+clicking the link automatically creates one for them. However, the problem arose when the invited person 
+already had an existing account. When they clicked the link, it logged them into their account directly!
+
+What is the normal scenario for an invitation link?
+Usually, when a person opens an invite, they should be prompted to enter their password first — not be 
+granted immediate access. Furthermore.
+
+Second Issue: Reusable Invitation Link
+The second problem is that the invitation link is not single-use.
+
+It can be used an unlimited number of times It remains valid even after the user accepts or rejects the invitation 
+The link never expires This introduces a serious security risk.
+
+What Happens If the Link Is Leaked?
+
+Now let’s ask an important question:What if the invitation link is leaked or obtained by an attacker in any way?
+
+The result is simple and dangerous:
+
+The attacker gets direct access to the victim’s account without:
+Email
+Password
+Any authentication step
+Just the link = full login access.
+This scenario is exactly the same as the one that led me to my first bounty You can read that write-up here:
 
 
+Bypassing Two-Factor Authentication (2FA)
+After publishing that write-up, some people told me:
+
+You should have tested whether the invitation link also bypasses 2FA
+
+Unfortunately, at that time the vulnerability was already fixed, so I couldn’t test it.
+
+But now, I had a very similar vulnerability, so I decided to try again.
+
+I went to the account settings and enabled Two-Factor Authentication.
+
+The process was standard:
+
+The application generated a QR code
+I scanned it using an Authenticator app (like Google Authenticator)
+The app started generating time-based one-time passwords (TOTP) that change every few seconds
+After confirming the code, 2FA was successfully enabled
+
+Enable 2FA
+After enabling 2FA, I opened the invitation link again.
+And here came the surprise:
+The invitation link bypasses 2FA as well.
+So even if the victim believes their account is secured with two-factor authentication,
+the invitation link has a different opinion.
+
+The Most Interesting Part
+At this point, I asked myself:
+
+If the invitation link eventually expires (for example after 2–3 days),
+how can I make my access to the account persistent, even after the link is no longer valid?
+
+The first thing I thought about was whether I could change the victim’s email to my own email and then completely
+remove the victim’s email, which would result in full account takeover.
+
+So I navigated to the email change settings and added my own email address.
+
+However, things did not go as expected. The application did not remove the victim’s email. Instead, 
+it added my email as a secondary, unverified email and sent the email verification link to the victim’s email address.
+
+The UI clearly showed that:
+The victim’s email was still the primary and verified email
+My email was listed as a secondary and Not confirmed email
+As a result, the first attempt failed.
+
+The Second thing I thought about was:
+Some applications allow users to change the account password without requiring the current password, so I went to check 
+this behavior in the account settings. However, this application required entering the current password first, which means
+this approach was not applicable in this case.
+
+I thought to myself:
+Why not try response manipulation using Burp’s Match & Replace?
+But first, I wanted to understand how the application verifies an email address.
+So, I went to the account settings, refreshed the page, intercepted the request, and analyzed the response. I noticed the following:
+
+Victim’s email → "isPrimary": true, "validatedAt": "2025-12-…"
+My email → "isPrimary": false, "validatedAt": null
+Now, let’s try response manipulation.
+
+The idea was to modify the response by swapping the email values, making my email appear in place of the victim’s email, and the 
+victim’s email appear in place of mine.
+
+I navigated to Burp Proxy → Match & Replace,
+selected Response body,
+then placed the original response in field (5),
+and the modified response in field (6).
+
+I set up the match/replace rules and refreshed the page.
+
+And here was the surprise
+
+The UI now showed:
+
+My email → Primary & Verified
+Victim’s email → Not confirmed
+
+Now my email is primary and victim’s email is Not confirmed now so I tried removing the victim’s email.
+Unfortunately, it failed and returned an error.
+
+Back to the ”Hero Image”
+Do you remember the image I told you to remember?
+
+Yes — the Change Password section.
+
+There is an option:
+“reset”
+
+If you forget your current password, the application can send you a reset link, allowing you to set a new password again.
+
+I asked myself:
+
+If the UI shows my email as the primary one,
+where will the password reset link be sent?
+
+Bingo
+
+I clicked Reset.
+
+Then I opened my Gmail.
+And here was the surprise
+The password reset link for the victim’s account was sent to MY email. Not the victim’s.
+
+This revealed another vulnerability:
+
+Response Manipulation leading to Password Reset Hijacking
+— — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — —
+
+Completing the Takeover
+I set a new password.
+
+Now I asked myself:
+
+Is my email verified permanently, or is this temporary?
+
+Because if it’s not permanent, the victim could reset the password again and lock me out.
+
+I checked the settings.
+
+The victim’s email was still present, but:
+
+My email now showed as Verified
+
+jfjxxxx@gmail.com ==> victim’s email
+
+faysxxxxx@gmail.com ==> my email
+
+Adrenaline…
+I then:
+Set my email as the primary email and it worked!
+Removed the victim’s email successfully!
+Disabled 2FA (it required the password, which I now had)
+
+Full Account Takeover Achieved
+At this point:
+
+Victim’s email → removed
+2FA → disabled
+Password → controlled by attacker
+Account → fully owned
 
 
 
