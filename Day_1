@@ -1517,3 +1517,29 @@ and BOOOM!!
 Impact
 This was a High vulnerability because the application was focusing on creating images and videos , and rating this images / videos
 
+Number: 20
+title: From 403 Forbidden to $$$$ How a Simple Extension Bypass Led to Unauthenticated Access to Private Documents
+id: writrup
+
+The target was a private HackerOne program that allows users to create organizations, upload documents, and share them naturally, 
+documents created inside an organization are expected to be private by default, accessible only to authenticated and authorized users. 
+Since the platform handles internal files (documents, images, reports, etc.), access control plays a critical role.
+I decided to focus my testing on direct access to uploaded files.
+
+## Initial Testing:
+
+After identifying a document uploaded inside an organization, I tried accessing it directly via its URL: `https://target.com/folder/folder/this-secret-file`
+The result was exactly what I expected: `403 Forbidden — You don’t have access`
+I repeated the same test with different file extensions: `.png | .docx | .csv | etc..` All requests were blocked with a `403 Forbidden`.
+At this point, the access control seemed solid.
+
+## Trying One More Thing:
+Before moving on, I decided to test the same request from a completely unauthenticated context (incognito browser) just to eliminate any session-related behavior. and guess what `Still blocked.`
+Then, almost as a last check, I tried something simple:
+I appended a `.pdf` extension to the same file path.
+`https://target.com/folder/folder/this-secret-file.pdf ` <=== (incognito browser)
+This time, the response was different.
+Instead of 403 Forbidden, the server returned 200 OK, and the file content loaded successfully — without authentication.
+
+
+
