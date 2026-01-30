@@ -1448,4 +1448,72 @@ Always focus on the Business Logic and how the application is supposed to work s
 lead to critical bugs. If your report is initially rejected, don’t give up — clearly articulate the Impact and the exploitation 
 scenario with logical, security-focused reasoning.
 
+Number: 18
+title: A Simple IDOR That Ignored Platform Logic
+id: writeup
+
+Let’s assume the target as redacted , just like any housing rental application.
+
+I had two advertisements under my account (one is Online and another is Offline). Interestingly, both advertisements had the same name :)
+The first advertisement was named Test 12 test with an iguana picture. This one was online and available for rent. (I was also testing EXIF metadata ^_^).
+
+The second advertisement was also named Test 12 test, but this one had a Starbucks picture and was offline, meaning it was not available for rent. 
+(If I clicked the “FOR RENT” button on it, it would become online and available again.)
+
+Now, when I tried visiting the publicly accessible URL of the offline advertisement: https://redacted/best/test_12_test/109
+
+It loads successfully, but at top right, It showed an error saying:
+
+“This housing is occupied....”
+Nothing serious. Totally expected. Everything looked normal so far.
+
+After that, I visited the advertisement that was available for rent: https://redacted/best/test_12_test/107
+Here, I noticed something interesting. This page had an option called “Go to Message”, which was not present on the offline advertisement.
+Okay, fair enough.
+
+So I clicked on “Go to Message” to message the landlord and intercepted the request in Burp Suite. At first glance, it was a completely normal request. 
+But one thing immediately caught my attention.
+There was a parameter called advertisement_id=107 This ID clearly belonged to the online advertisement (yes, the iguana picture one).
+
+As expected, I was able to send a message to the landlord of the available advertisement without any issue.
+
+But this is where curiosity kicked in. I started wondering…
+What if I change this advertisement_id to the one that belongs to the offline advertisement?
+Press enter or click to view image in full size
+
+We already know that advertisement IDs were visible directly in the URL, and they were sequential 
+and incremental, which meant they could be easily guessed or brute-forced.
+
+So I decided to change the value of advertisement_id from 107 → 109 and sent the request again.
+
+I was redirected to the chat interface.
+I was able to successfully message the landlord of an advertisement that was not available for rent.
+In other words, the backend never validated whether the advertisement was online or offline before allowing the message action.
+
+To confirm the impact, I did some additional testing using Intruder and was able to message multiple landlords whose advertisements were not available for rent.
+
+This confirm the presence of IDOR vulnerability.
+
+Lessons Learned
+Always test backend behavior, not just what the UI allows or blocks
+Sequential and predictable IDs are a huge red flag, never ignore them
+Hidden buttons do not mean hidden functionality
+Curiosity is key. One parameter changing often leads to the full bug
+
+Number: 19
+title: How I found a Race condition on Like Function 
+id: Writeup 
+
+Identifying the Issue
+While digging into the application, I tried many different things like Privilege Escalation, Broken Authentication, and SQL Injection, but none of them worked. Then, once I saw the Like Function, I quickly decided to test for a race condition
+
+Steps to Reproduce
+Upload a photo once uploaded.
+Open the intercept and click on the like button.
+After capturing the request for the like, send it to the repeater and duplicate the request like 20 or 30 times.
+Then, send them all as a single packet attack.
+
+and BOOOM!!
+Impact
+This was a High vulnerability because the application was focusing on creating images and videos , and rating this images / videos
 
