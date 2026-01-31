@@ -1403,8 +1403,6 @@ Let’s call the target website `target.com`.
 When I created a new account, the application sent an Activation Link to my email to verify the account.
 I clicked the link, and it immediately logged me into my account.
 
-Press enter or click to view image in full size
-
 Note: I spent some time understanding the site’s overall workflow, which took me a full day due to its size and the number of 
 functions available. Understanding the Business Logic is crucial.
 
@@ -1426,8 +1424,6 @@ I quickly wrote the report, highlighting that the link was reusable and automati
 
 One day later, the security team responded:
 
-Press enter or click to view image in full size
-
 This response was a direct confirmation of the issue! The security team focused on the 48-hour expiration but ignored the core problem:
 
 Reusability: The link can be used more than once.
@@ -1435,8 +1431,6 @@ Automatic Login: The link not only verifies but also authenticates the user.
 These two factors combined transform a simple activation link into a 48-hour Account Takeover vulnerability!
 
 Here is the summary of the follow-up I sent to clarify the security impact:
-
-Press enter or click to view image in full size
 
 After my detailed follow-up explaining the real security impact, they reopened the report and set the status to Under Review.
 
@@ -1534,12 +1528,376 @@ I repeated the same test with different file extensions: `.png | .docx | .csv | 
 At this point, the access control seemed solid.
 
 ## Trying One More Thing:
-Before moving on, I decided to test the same request from a completely unauthenticated context (incognito browser) just to eliminate any session-related behavior. and guess what `Still blocked.`
-Then, almost as a last check, I tried something simple:
+
+Before moving on, I decided to test the same request from a completely unauthenticated context (incognito browser) just to eliminate any session-related behavior. 
+and guess what `Still blocked.`Then, almost as a last check, I tried something simple:
 I appended a `.pdf` extension to the same file path.
 `https://target.com/folder/folder/this-secret-file.pdf ` <=== (incognito browser)
 This time, the response was different.
 Instead of 403 Forbidden, the server returned 200 OK, and the file content loaded successfully — without authentication.
 
+Number: 21
+title: Double-Door IDOR Exposing 85k+ Emails
+id: medium writeup
+
+The Story Begins: An Innocent Email Verify Page
+It all started normally.
+
+I signed up on the website https://redacted/user/signup, and it redirected me to a standard page: https://redacted/user/checkEmail/61250 
+with text “Almost done! Confirm your email address”
+
+Everything looked routine as this mean we have to first verify email before creating account, until I glanced at 
+the URL: /user/checkEmail/61250 . A simple numeric user ID :)
+
+Curious, I changed the ID from 61250 → 61249 and you know I let my intrusive thoughts win.
+
+To my surprise, the page didn’t break.
+Instead, it displayed another user’s email confirmation page including their email address.
+
+I keep testing and discovered more than 60k+ Emails are you know these are incremental and guessable.
+
+The platform was exposing all user emails by simply changing ID numbers.
+
+Within minutes it became obvious that:
+
+IDs were sequential
+Emails of every user were accessible
+Even administrative emails appeared
+No login was required
+No rate limiting
+No restrictions
+
+Part Two: A 404 Page That Leaks Everything
+I was exploring a totally unrelated platform.
+I logged into my account at: https://redacted/login and in my profile I could click my email address and it redirected to me to page with URL:
+
+https://redacted/user/26720/printable
+The page responded with: “Pagina niet gevonden” (Page not found)
+
+But the breadcrumb above the page told a very different story:
+
+Home » myemail@gmail.com » Page not found
+
+The user’s email address was displayed… (In this case it was mine) on a 404 page…
+
+I again look for the URL and it shows /user/checkEmail/61250 . A simple numeric user ID :)
+
+I again let my intrusive thoughts win and I changed the ID from 26720 → 26719
+
+Again the emails of all users were leaked.
+
+This was an interesting because page show “No Found” error but it display the email and from here around 25k+ Email leaked.
+
+I responsibly documented and reported the vulnerabilities to the clients and got fixed.
+
+Number: 22
+title: From a Single ID to Confidential Report Disclosure — Breaking Patterns in a Real Bug Bounty
+id: medium writeup
+
+Understanding the Application Flow
+Before diving into the actual bug, it’s important to understand how this application handles vulnerability reporting.
+
+When a researcher reports a vulnerability via email, the team creates an internal issue inside their web application — essentially a ticketing system. Each report is assigned an issue ID, and a dedicated page is generated to track the entire lifecycle of that report.
+
+This issue page maintains:
+
+The complete communication history
+Status updates
+Uploaded evidence files such as screenshots, text files, and PDFs
+Each issue can be accessed through a URL like:
+
+/common/issue-tracking.php?id=228
+
+From there, all associated evidence files are loaded dynamically from internal endpoints. This flow is meant to centralize reporting and make collaboration easier — but it also becomes a critical attack surface if access controls are not handled correctly.
+
+Once I understood this workflow, I started looking at how deeply these report resources were protected.
+
+From a Simple ID to Something Much Bigger
+The first thing that caught my attention was how easily the id parameter could be decoded.
+
+The value looked complex at first glance — a long hexadecimal string — but when decoded as ASCII Hex in Burp Suite, it immediately turned into readable characters.
+
+Not hashes.
+Not random bytes.
+Just structured text.
+
+That alone was enough to slow me down and look closer.
+
+A Target Worth Revisiting
+I had worked on this target before.
+Earlier reports included things like stored XSS and a 2FA misconfiguration. After some time passed, I decided to revisit it with fresh eyes.
+
+It was late at night — the kind of time when you stop rushing and start noticing things others miss.
+
+The application’s reporting flow was straightforward:
+If you report a vulnerability via email, the team creates an issue internally in their web application. Each report gets a ticket-like page that contains the full history of communication along with uploaded evidence.
+
+Those reports were accessible via a URL like:
+
+/common/issue-tracking.php?id=228
+
+Naturally, the first thing I checked on this endpoint was for a classic IDOR issue. After testing it properly, it was clear that simple ID manipulation wasn’t working and there was no direct IDOR vulnerability. Instead of forcing it further, I went back to my own old report and reviewed the original email thread, where the same issue-tracking URL was referenced.
+
+That’s when I decided to dig deeper — not horizontally, but vertically.
+
+Where Evidence Files Changed Everything
+Inside the report page, I noticed that all uploaded evidence files — images, text files, PDFs — were being loaded from a different endpoint:
+
+/common/admin/issue-tracking/file.php?id=585b243672692442373b4d4d2b33327c707b737428517b6c73266d3423747d6f364d3823255d3a
+
+The id parameter here looked encoded, not random.
+
+I copied it straight into Burp Decoder and decoded it as ASCII Hex.
+
+The result:
+
+X[$6ri$B7;MM+32|p{st(Q{ls&m4#t}o6M8#%]:
+
+At first glance, it looked messy — capital letters, lowercase letters, numbers, special characters — everything mixed together.
+
+But I didn’t stop there.
+
+Press enter or click to view image in full size
+
+Decoded to ASCII Hex
+The Pattern Starts to Appear
+I checked another evidence file URL from the same report:
+
+/common/admin/issue-tracking/file.php?id=565b243672692442373b4d4b2b33327c707b737428517b6c73266d3423747d6f364d3823255d36
+
+Decoded:
+
+V[$6ri$B7;MK+32|p{st(Q{ls&m4#t}o6M8#%]6
+
+Now things started to get interesting.
+
+Become a member
+Comparing the two decoded values, only four parts were changing:
+
+The first capital letter (R → V)
+Two capital letters in the middle (NE→ RM)
+The last character (+ → 6)
+Everything else stayed exactly the same
+That’s not randomness.
+That’s structure.
+
+To be sure, I checked one more evidence file:
+
+/common/admin/issue-tracking/file.php?id=545b243672692442373b4d492b33327c707b737428517b6c73266d3423747d6f364d3823255d32
+
+Decoded value:
+
+T[$6ri$B7;MI+32|p{st(Q{ls&m4#t}o6M8#%]2
+
+At this point, the pattern was undeniable.
+
+Press enter or click to view image in full size
+
+Understanding of Pattern
+Automating the Curiosity
+Once the pattern was clear, manual testing no longer made sense.
+
+I wrote a Python script that:
+
+Bruteforced only the four variable positions
+Re-encoded each generated value back into ASCII Hex
+Sent requests to the file endpoint automatically
+Logged responses that didn’t match known invalid patterns
+This wasn’t blind brute force — it was constrained enumeration, guided by structure.
+
+I also checked archives like Wayback to see if the endpoint had been indexed before. Nothing useful came up. But honestly, that didn’t matter.
+
+Sensitive data should never rely on obscurity alone.
+
+In bug bounty, unlike pentesting, theoretical issues rarely get accepted. You need to show real-world impact.
+
+So I let the script run.
+
+Press enter or click to view image in full size
+
+Successfully got some other Valid IDs
+When the Script Started Talking Back
+The script began returning valid responses.
+
+And when I manually visited those URLs…
+
+I was looking at other researchers’ reports.
+
+Full PDFs.
+Screenshots.
+Internal vulnerability details.
+
+No authentication.
+No authorization.
+Just a predictable pattern and an exposed endpoint.
+
+At that moment, the issue stopped being “interesting” and became serious.
+
+This wasn’t just a bug.
+It was a direct compromise of the platform’s confidentiality.
+
+Press enter or click to view image in full size
+
+Successfully downloaded other User’s Report
+Why This Matters
+This wasn’t about breaking encryption.
+This wasn’t about brute force.
+
+It was about noticing that something meant to look complex was actually predictable — and that no access control stood in the way.
+
+Confidential vulnerability reports are some of the most sensitive assets a platform has. Exposing them undermines trust, disclosure integrity, and user safety.
+
+Final Thoughts
+Whenever you see encoded values, don’t assume they’re secure.
+
+Try decoding them:
+
+Sometimes Burp’s built-in decoders are enough
+Sometimes tools like hashes.com or crackstation.net help
+And sometimes… it’s just ASCII Hex hiding in plain sight
+Most bugs aren’t hidden.
+They’re right in front of us.
+
+We just need to change how we look at them.
+
+Number: 23
+title: BAC = $$$
+id: medium writeup
+
+The Discovery…
+
+While exploring the application, a feature looks interesting to me
+In the policy section, the admin can set restrictions so that only the admin is allowed to view other users' emails
+I enabled the feature and checked the UI, and the emails of other users within the organization have disappeared
+Next, I checked the API response, and it’s doing its job perfectly
+but I know there might be another endpoint that could expose the emails, I started exploring chat section but found nothing
+
+The application has a call feature that allows any user in the organization including non-admins to call other users
+While analyzing the requests, I noticed that an endpoint exposes the email
+
+Steps to Reproduce
+
+In the administrator account, go to the settings
+and configure the policy so that only administrators can view other users’ email addresses.
+From the user account (non-admin), initiate a voice or video call to any member
+Inspect the captured traffic and observe the request
+POST /_chat/v2/users/<id>/call where the admins or user’s email address is exposed by the API.
+
+Number: 24
+title: $500 for a UUID Swap: I Almost Gave Up on This IDOR
+id: Medium writeup
+
+The Program
+This company provides an application that can best be described as a modern-day password manager. 
+A key feature of the app is the ability to add a trusted device, which allows users to bypass OTP 
+verification during the login process on that specific device.
+
+The vulnerability
+There is an API endpoint to retrieve information about our own Trusted device. This endpoint takes our 
+account’s UUID and returns the device’s information. There was an IDOR vulnerability in this API that allowed
+an attacker to retrieve device info belonging to other users in the same tenant
+
+
+JS Recon to Discover More
+I have to admit; I had initially given up on finding an IDOR. However, while attempting to execute a separate attack, 
+I began reviewing the JavaScript to identify all admin-related requests (those directed to /api/v3/admin/*). During this
+process, I stumbled upon an endpoint that got me thinking. This specific endpoint is triggered when clicking on a user with 
+whom you have shared a password, and it returns limited information such as their name and role.
+
+#different endpoint to return limited member info
+/api/v3/members/<UUID>/account/info
+So, I thought: if ../account/info returns only limited account details, what happens when I change things up a bit?
+
+The Exploit
+Nothing too complex, I simply recooked the API endpoint into one that pulls another member’s Trusted device information, and it worked.
+
+#reworked endpoint to return another member's device info
+/api/v3/members/<UUID>/trusted-devices/info
+By substituting another user’s UUID into that endpoint, I was able to retrieve their device information. The disclosure included their User-Agent,
+IP address, and several cryptographic keys.
+
+As for the UUIDs themselves, they were leaked throughout the application. For example, when a registered user shares a credential set with you, 
+their unique UUID is exposed within the share link.
+
+Impact and Payment
+The major impact here was the leakage of other member’s external IPs and cryptographic keys. I reported this as a High but was bullied into settling for a Medium gang.
+
+Number: 25
+title: Email Body Truncation via Null Byte Injection
+id: medium writeup
+
+The program I was testing, let’s call it X, is a web application that allows users to create notes and share them via email with anyone, 
+whether they are signed up on X or not. After creating a note and sharing it with my second email address, I received a message that looked like this:
+
+As you might be thinking right now, since the email contains my name (which I can set to any text I want) and the note name, I decided to try HTML Injection
+by changing my name to <h1>HTML</h1> and doing the same for the note name; unfortunately, it didn’t work because the web application was correctly performing 
+HTML encoding on the email content before sending it.
+
+Later, I tried setting my name to special characters that can be interpreted differently by various programming technologies, changing it to 
+something like “’`\@!?”<H1>Test</H1>, then I invited my second email to the note again, but this time something weird happened because I didn’t 
+receive an email at all!
+I initially thought the application might have a rate limit on sending emails to avoid spam, perhaps only allowing an invitation email to be sent 
+again after 5 minutes to the same email, or something similar to that. To check this, I changed my name back to a normal English name and invited 
+my second email to the note again. Surprisingly, I received the email immediately. After trying this several times in a short duration and always 
+receiving the email, I realized that something in the previous name (“’`@!?”<h1>Test</h1>) was causing an exception when the web application tried 
+to send the invitation email.
+
+I began deleting characters one by one to understand what exactly was triggering the exception, so I deleted > first, then /, but I still received 
+nothing until I finally deleted \. When I invited my second email after removing the backslash, I finally received the email, which led me to believe
+the server was interpreting \ as a special character; I immediately thought of Unicode escape characters, which allow us to represent any characters as
+text using the format: \uXXXX.
+
+Become a member
+To test this hypothesis, I changed my name to \u0061 (which represents the character a) and invited my second email, and as I expected, the email body
+contained a as my name instead of \u0061:
+
+Press enter or click to view image in full size
+
+This confirmed that \uXXXX was being interpreted by the application back-end into its corresponding Unicode character (whether it was printable like a
+or non-printable like control characters), so knowing this, the next logical step was to try \u0000, which represents a null byte that is known to signify 
+the end of a string in C-like programming languages; after I did that, I received an empty email because the email starts with my account name (\u0000), and 
+since the null byte was interpreted as the end of the email body string, it truncated everything after it:
+
+Press enter or click to view image in full size
+To demonstrate the impact of this vulnerability, I changed my name to a phishing message that ends with \u0000:
+In order to access the “Secret” note, you must confirm your identity — Please complete the verification at the following link: https://by-0xcyborg.com/login\u0000
+The result looked like this:
+Press enter or click to view image in full size
+So, the final impact was that I could use the company’s official, verified email address to send an email containing any text I wanted to any recipient.
+
+Number: 26
+title: DoS on a live streaming and chatting App (Ethically).
+id: Medium
+
+Recon
+I downloaded the application from the Play Store (10M+ downloads) and began using it as a normal user. Each user on the platform 
+is assigned a sequential, numeric-only User ID: newer accounts have seven-digit IDs, 
+while older accounts have six digits. Using these IDs, users can view profiles, send messages, join rooms, or engage with agencies.
+I searched for a web version of the application but found that only verified users had access to a browser-based interface. At that time, 
+I was unable to intercept Android traffic, so I shifted my focus to identifying any web endpoints that might directly interact with the Android application.
+
+Using a simple Google dork with wildcard searches, I discovered numerous endpoints. After reviewing many of them, I found one particularly interesting endpoint:
+/request-for-agency/user. This endpoint accepted a User ID and, in response, triggered a verification code delivered to the system notifications section inside 
+the Android app. By submitting multiple requests like more than ten times , I confirmed that each request sends a new verification code.
+
+This became entry point for me .
+
+Lets Exploit
+I already had an idea in my mind, and this was the right moment to test it. The first thing I needed to check was whether the endpoint had any rate limiting.
+Luckily, it did not. So I wrote a small Python script that kept sending the same request again and again, more than a thousand parallel requests, just to see 
+what would happen. I put my own User ID in the script and ran it.
+
+Within seconds, my phone was flooded with verification codes. The system notifications were coming in so fast that I could not even pull down the notification 
+panel. After about two minutes, the real impact showed up. The app started throwing NULL errors in every section and finally crashed completely. I could not 
+join any rooms or broadcasts, I could not view profiles, and even my own profile stopped loading. This confirmed that the exploit worked exactly as I expected. 
+As User IDs were sequential and numeric only , it was very easy to crash every user on platform just with simple automation.
+
+At that point, I asked my two friends for their User IDs. They thought I was going to join them in their broadcast, but instead I ran the script on both of their 
+accounts. Their apps crashed in the same way, and the only method to recover was to delete the app and create new accounts. Then i was able to sleep good.
+
+As a Ethical Hacker , Yes I reported this to platform’s security team and provided my friend’s accounts as PoC.
+
+I hope you learned something from this write-up. I will be sharing more interesting and critical DoS findings in future posts, including some that I have 
+never shared before
 
 
