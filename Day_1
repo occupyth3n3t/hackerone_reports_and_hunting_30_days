@@ -2159,3 +2159,537 @@ Malicious script injection to phish users.
 DOM manipulation to redirect or mislead users.
 Could be chained with CSRF/Clickjacking for larger impact.
 
+Number: 35
+title: Two-factor authentication security testing and possible bypasses
+id: writeup by max
+
+1. Lack of rate limit.
+The rate Limit algorithm is used to test whether a user session (or IP address) can be limited in attempts or speed, and under 
+what circumstances this happens. If the user has performed too many requests within a certain period of time, the web application 
+can respond with a 429 code (many requests) or apply a rate limit without showing errors. The absence of a rate limit implies that
+during normal enumeration there are no restrictions on the number of attempts and/or speed — it is allowed to iterate over codes any 
+amount of times (at any speed) within the session / token validity period.
+
+Quite often, I have to deal with a “silent” rate-limit, — if you saw that there are no errors and the HTTP body/code doesn’t change 
+in subsequent requests, it’s early to rejoice, and firstly, you need to check the final result of the attack using valid code.
+
+2. Rate limit exists, but it can be bypassed.
+Cases that I had met before:
+
+1) Limiting the flow rate with the absence of blocking after reaching a certain flow rate.
+Often, security analysts try to pick up code using 2 or more threads to make an attack faster (in Burp Intruder, the default number of 
+threads is 2 without delay). But sometimes a security system from brute-force or a regular Load Balancer can only respond to this single 
+factor. If you are trying to brute-force with 2 threads, it is worth reducing the number to 1, and then to 1 with a delay of one second.
+Earlier, I was lucky to observe such behavior and precisely with the help of such manipulations the successful selection of code occurred, 
+which led to Account Takeover. If the 2FA code doesn’t have a specific expiration date, then we have a lot of time to sort through. But if 
+the validity period is present, then the success of the attack is reduced, but the potential danger of vulnerability is still presented since 
+there is still a chance of getting into the right code.
+
+3) Rate-limit resetting when updating the code.
+In code verification request, rate-limit is present, but after activating the functionality of code re-sending, it resets and allows you to continue the brute force of the code.
+Examples of reports:
+https://hackerone.com/reports/149598, — theory;
+https://hackerone.com/reports/205000, — a practical exploit based on a previous report.
+
+4) Bypassing the rate limit by changing the IP address.
+Many locks are based on the restriction of accepting requests from IP, which has reached the threshold of a certain number of attempts 
+when executing a request. If the IP address is changed, then there is an opportunity to bypass the restriction. In order to check this 
+method, simply change your IP using the Proxy server/VPN and see if the blocking depends on the IP.
+
+Ways to change IP:
+— Proxies can be used in an attack using the IP Rotator extension for Burp Suite https://github.com/RhinoSecurityLabs/IPRotate_Burp_Extension.
+In my opinion, this is the best choice, because it gives us ~ unlimited brute force attempts and IP addresses that allow you to perform a brute-force 
+attack without 42x errors and interruptions.
+
+
+IP Rotate add-on interface
+- A good option might be a python script with a proxy requests module, but first, you need to obtain a large number of valid proxies somewhere.
+Since IP rotate tool sends requests using AWS IP addresses, all requests will be blocked if the web application is behind the Cloudflare firewall.
+In this case, you need to additionally find the IP of the original web server or find a method that doesn’t concern AWS IP addresses.
+
+5) On the site, support for X-Forwarded-For turned on.
+The built-in header X-Forwarded-For can be used to change IP. If the application has built-in processing for this header, simply send X-Forwarded-For:
+desired_IP to replace the IP to bypass the restriction without the use of additional proxies. Every time a request is sent using X-Forwarded-For, the 
+web server will think that our IP address matches the value transmitted through the header.
+Related materials:
+https://hackerone.com/reports/225897
+https://medium.com/@arbazhussain/bypassing-rate-limit-protection-by-spoofing-originating-ip-ff06adf34157
+
+3. 2FA bypass by substituting part of the request from the session of another account.
+If a parameter with a specific value is sent to verify the code in the request, try sending the value from the request of another account.
+For example, when sending an OTP code, the form ID/user ID or cookie is checked, which is associated with sending the code. If we apply the data
+from the parameters of the account on which you want to bypass code verification (Account 1) to a session of a completely different account (Account 2),
+receive the code and enter it on the second account, then we can bypass the protection on the first account. After reloading the page, 2FA should disappear.
+
+3. 2FA bypass by substituting part of the request from the session of another account.
+If a parameter with a specific value is sent to verify the code in the request, try sending the value from the request of another account.
+For example, when sending an OTP code, the form ID/user ID or cookie is checked, which is associated with sending the code. If we apply the
+data from the parameters of the 
+account on which you want to bypass code verification (Account 1) to a session of a completely different account (Account 2), receive 
+the code and enter it on the second account, then we can bypass the protection on the first account. After reloading the page, 2FA should disappear.
+
+4. Bypass 2FA using the “memorization” functionality.
+Many sites that support 2FA, have a “remember me” functionality. It is useful when the user doesn’t want to enter a 2FA code on subsequent login windows. 
+And it is important to identify the way in which 2FA is “remembered”. This can be a cookie, a value in session/local storage, or simply attaching 2FA to an IP address.
+
+1) If 2FA is attached using a cookie, the cookie value must be unguessable.
+That is, if a cookie consists of a set of numbers that increased for each account, then it is quite possible to apply a brute-force attack to cookie value and 
+bypass 2FA. Developers should supply the cookie (along with the key session cookie and CSRF token) with the HttpOnly attribute so that it cannot be stolen using 
+XSS and used to bypass 2FA.
+
+2) If 2FA is attached to an IP address, you can try to replace your IP address.
+To identify this method, log in to your account with the 2FA “memorization” function, then switch to another browser or incognito mode of the current 
+browser and try to log in again. If 2FA is not requested at all, then 2FA has been attached to the IP address.
+To replace the IP address, you can use the X-Forwarded-For header at the stage of entering the login and password, if the web application supports it.
+Using this header, you can also bypass the “IP address white-list” function, if one is present in the account settings. It can be used in conjunction with 
+2FA as additional account protection or may not even request 2FA if the IP address matches the white-list (with the consent of the user). Thus, even without 
+attaching the 2FA to the IP address via “memorization” functionality, in some cases, 2FA can be bypassed with the help of bypassing the concomitant protection methods.
+In general, attaching 2FA to an IP address is not a completely safe way of protection, since if you are present on the same network or connected to the same VPN/Internet 
+service provider with a static IP address, 2FA can be bypassed.
+
+5. Improper access control bug on the 2FA dialog page.
+Sometimes a dialog page for entering 2FA is presented as a URL with parameters. Access to such a page with parameters in the URL with cookies that do not 
+match those used to generate the page or without cookies at all is not safe. But if the developers decided to accept the risks, then you need to go through
+a few important points:
+1) Does the link for 2FA dialog page expire;
+2) Whether the link is indexed in search engines.
+If the link has a long period of existence and/or the search engines contain working links for 2FA input/links can be indexed (there are no rules in robots.txt / meta tags), 
+then there is a possibility of using a 2FA bypass mechanism on the 2FA input page, in which you can completely bypass entering login and password, and gain access to someone 
+else’s account.
+
+6. insufficient censorship of personal data on the 2FA page.
+When sending code on a page, censorship is used to protect personal data such as email, phone number, nickname, etc. But this data can be fully disclosed in 
+the API endpoints and other requests for which we have enough rights at the 2FA stage. If initially this data was not known, for example, we entered only a login 
+without knowing the phone number, then this is considered “Information Disclosure” vulnerability. Knowledge of the phone number/email can be used for subsequent 
+phishing/brute force attacks.
+
+An example of exploiting a vulnerability using Credentials Stuffing. Let’s say there is a publicly accessible database with logins and passwords for site A. 
+Attackers can use the data from this database on site B:
+— Firstly they check whether the user exists in the database of site B using the “Accounts Enumeration” bug in registration/password recovery functionality.
+Typically, many sites do not consider this vulnerability and take risks. “Vulnerability” lies in the presence of an error that discloses a fact of user registration 
+on the site. Ideally, a secure message on the password recovery page is as follows:
+
+Grammarly
+- After receiving the database of existing users, attackers apply passwords to these accounts.
+— If they encounter 2FA, they are at a dead end. But in case of insufficient censorship of user data, they can supplement their database with users’ 
+data if they were not in the original database and credentials for the original website don’t work.
+
+1) 2FA ignoring when recovering a password.
+Many services perform automatic login into your account after completing the password recovery procedure. Since access to your account is provided instantly, 
+when you log in to your account, 2FA can be skipped and completely ignored.
+
+Impact of a similar report on HackerOne I sent recently:
+
+If an attacker gains access to the victim’s email (he can hack the account using phishing, brute-force attacks, credentials stuffing, etc.), he can bypass 2FA,
+although in this case 2FA should protect the account. At the moment, for 2FA there is a check of the Google Authenticator code or the backup code, but not the code 
+from the email, so this Bypass makes sense.
+
+3) Ignoring 2FA in an older version of the application.
+Developers often add staging versions of a web application to domains/subdomains to test certain functions. Interestingly, if you log in using your 
+username and password, 2FA may not be requested. Perhaps the developers are using an older version of the application in which there is no protection 
+for 2FA, 2FA itself is disabled or it was intentionally disabled for testing.
+
+You can also check other vulnerabilities at the same time, — registering a new user on a staging server whose email exists in the production 
+version database can give you a user’s personal data from production; the absence of a rate limit in important functionality, for example,
+password recovery. An example of such a vulnerability is a $ 15,000 facebook bug, which allowed hacking an account via the brute-force password recovery code
+at beta.facebook.com https://www.freecodecamp.org/news/responsible-disclosure-how-i-could-have- hacked-all-facebook-accounts-f47c0252ae4d/.
+
+4) Ignoring 2FA in case of cross-platforming.
+Implementations of 2FA in a mobile or desktop version may differ from the web version of the application. 2FA may be weaker than in the web version or completely absent.
+
+7. When disabling 2FA, the current code or password is not requested.
+If, when disabling 2FA, additional confirmation is not requested, such as current code from the google authenticator application, the code from email/phone, 
+then this behavior has certain risks. With a clean request, there is a chance of a CSRF attack. If a bypass vector of CSRF protection is found (if any), then 
+2FA can be disabled. You can also use the clickjacking vulnerability — after a couple of clicks from an unsuspecting user, 2FA will be disabled. Validation of
+the previous code will add additional 2FA protection, considering potential CSRF / XSS / Clickjacking attacks, as well as CORS misconfigurations.
+
+
+8. Previously created sessions remain valid after activation of 2FA.
+When 2FA is enabled, it is desirable that parallel sessions on the same account end and that appearing 2FA dialog is 
+required, the same with a password change. If the account was compromised and the first reaction of the victim will be 
+the turn-on of 2fa, then the attacker’s session will be disabled and the next login and password will require 2FA. All 
+in all, this is the best practice to be followed. I often notice how cryptocurrency exchanges add 
+
+9. Lack of Rate-limit in the user’s account.
+2FA can be added to various functions of the user’s personal account in order to increase security. This can be a change of email address, 
+password, confirmation of a code change for financial transactions, etc. The presence of rate-limit in your 
+account may differ from the presence of rate-limit-a in the 2FA window upon entering your account. I have often come across similar cases when 
+it was possible to freely brute-force 2FA code in my account, while at the entrance a “Strict” rate-limit was configured.
+
+10. Manipulation of API’s versions.
+If you see something like /v*/ in the application’s request, where * is a number, then it’s likely that you can switch to an older version of the API. 
+In the old version of the API, there may be weak protection or it may be not presented at all. This is a fairly rare occurrence and occurs in the case 
+if developers forgot to remove the old version of the API in the production/staging environment.
+
+For example, /endpoint/api/v4/ login performs a login request, checking the username and password. If 2FA is tied to the account, this request should 
+be followed by /endpoint/api/v4/2fa_check, no other options. If we replace the API version before 2FA, then, in some cases, we can avoid it.
+/endpoint/api/v3/login can lead to /endpoint/api/v3/login_successful?code=RANDOM, ignoring 2fa_check because in this version of the API, because 
+2FA was simply not implemented.
+
+11. Improper Access Control in the backup codes request.
+Backup codes are being generated immediately after 2FA is enabled and are available on a single request. After each subsequent call to the request, 
+the codes can be regenerated or remain unchanged (static codes).
+If there are CORS misconfigurations/XSS vulnerabilities and other bugs that allow you to “pull” backup codes from the response’ request of the backup 
+code endpoint, then the attacker could steal the codes and bypass 2FA if the username and password are known.
+
+In general and whole, 2fa is one of the most reliable ways to protect your account, unless, of course, developers store the current 2FA codes of all 
+users of the web application in the admin panel, — and this has happened in my practice. I would also like to note that developers of some companies 
+create applications for generating their own 2FA codes (examples are Salesforce, Valve) and, due to the lack of security, this emphasis on independence 
+from using other authentication applications gives attackers an additional entry point for 2FA bypassing. The range of application of this protection is
+quite large and gives those wishing to bypass 2FA protection more opportunities, 
+space for creativity and increases the number of variations of 2FA bypasses.
+Another example, — in the request /endpoint/api/v4/2fa_check there is a rate-limit, while /endpoint/api/v3/2fa_check allows you to brute-force the codes 
+without any restrictions.
+
+If the developers initially added protection against unauthorized data changes, then this protection must be supported and all possible bypasses should be
+fixed. If bypass is found, then this is considered as a security feature bypass vulnerability that was implemented by the developers, which is a vulnerability.
+such protection. An example of the report on HackerOne, — https://hackerone.com/reports/534450.
+I’ll give you an example of the website hackerone.com, — when you turn off 2FA in the form, you need to enter two values at the same time, — the current code from
+google authenticator app and password. This is the best and recommended protection.
+
+Number: 36
+title: Account Takeover via email verification endpoint leads to unauthorized email binding and password reset
+id: writeup Mohamed M Mourad
+
+In a private program on HackerOne (let redacted.com). While testing the website, I noticed that it uses cookies with a nonce SameSite attribute, and an application/json content type. From there, if an endpoint also accepts application/x-www-form-urlencoded, there may be a possibility of cookie-based attacks such as CSRF or link-triggered actions.
+
+In the email verification functionality, I noticed that it still worked even after verifying an email once. This means a user can verify multiple emails, and the account becomes tied to the most recently verified email. From there, hit in my mind, if an attacker could force a victim to verify the attacker’s email address, the victim’s account would become associated with the attacker’s email. As a result, the attacker could reset the password and take over the victim’s account.
+
+Press enter or click to view image in full size
+
+Original Request
+The default email verification endpoint is /api/VERIFICATION/email-verify, which uses the POST method and works with application/json. 
+When the Content-Type is changed to application/x-www-form-urlencoded, the server responds with 403 Forbidden.
+
+Press enter or click to view image in full size
+
+Forbidden Request
+While testing another endpoint, noticed that it uses the old API path /api/web/v1/auth/api-v1-user-forgot-password-save.
+
+Press enter or click to view image in full size
+
+Old API Path — Change Password
+So, went back to the email verification functionality, I sent a request to /api/web/v1/VERIFICATION/email-verify with application/x-www-form-urlencoded and 
+replayed it. The server responded with 200 OK.
+
+200 OK — POST Method
+The default HTTP method for this endpoint was POST. After modifying it to GET and replaying the request, it still worked. This turns the attack scenario from a CSRF
+attack into a simple link-click attack. (this step is must if the cookie SameSite is lax, but in my case is not)
+
+Press enter or click to view image in full size
+
+200 OK — GET Method
+In the end, deleivered the exploit to the victim via the url: https://redacted.com/api/web/v1/VERIFICATION/email-verify?email=attacker.com. once the victim clicked the 
+link, a notification was sent to my email then reset the email password and took over the victim account.
+
+Write on Medium
+Tips:
+- Check functionality endpoint paths well; you may find old API paths that are vulnerable.
+- Check whether the endpoint accepts application/x-www-form-urlencoded, as this may enable CSRF or link-triggered attacks.
+
+Number: 37
+title: EMAIL change without password and 2FA (Response Manipulation Simple BUG)
+id: writeup by Nirmal Shrestha
+
+I don’t chase CVEs. I don’t race to be first. I’m just a beginner in bug bounty who likes asking: “What if this isn’t as solid as it looks?”
+
+Also, full disclosure:
+
+I once tried logging in with a password made of 10 Zero Width Spaces (U+200B).
+The system accepted it, reset my password, and emailed me a confirmation that literally said:
+“Your new password is:<space>”
+
+Me, staring into the void: “Ah. So we’re doing interpretive dance security now.”
+
+That’s the thing about invisible characters — they’re not just for blank WhatsApp messages (shoutout to blanktext.net ). Sometimes, they reveal 
+how little a system actually validates what you give it.
+
+But this story isn’t about Unicode. It’s about something even simpler: a single JSON field that lied — and the server believed it.
+
+The Discovery: “Verify Your Identity”… Or Just Pretend To?
+I started where most do: testing password reset flows, 2FA bypasses on login, token reuse. Nothing worked — REDACTED.COM had locked down the front door properly.
+
+So I moved inward.
+
+After logging in (with 2FA enabled), I went to Account Settings → clicked “Update” next to my email. The page responded with:
+
+“First, verify your identity.”
+→ Password field
+→ 2FA prompt
+
+Perfect. That’s how it should be.
+
+But instead of entering my real password, I typed “wrongpass” and hit Continue.
+
+In Burp Suite, I saw the request to /users/challenge return:
+
+{ “success”: false, “errorCode”: “invalid-credentials” }
+
+Expected. Boring.
+
+Then — because I’ve seen too many apps trust the client — I changed it to:
+
+{ “success”: true, “errorCode”: “” }
+
+I forwarded the response.
+
+And instead of an error like “Password required” or “2FA code invalid”…
+I was instantly redirected to the “Enter your new email” page.
+
+No challenge. No code. No second thought.
+
+I typed attacker@gmail.com, clicked Change Email, and got:
+✅ “Email updated successfully.”
+
+I hadn’t proven anything. But the app acted like I’d passed every test.
+
+The Vulnerability: When the Frontend Lies and the Backend Nods
+This was a critical post-authentication bypass.REDACTED.COM enforced password + 2FA on the frontend, but the backend never validated whether the user had actually completed the verification before allowing the email change.
+
+Write on Medium
+The /users/challenge endpoint was treated as a gate—but the gatekeeper was asleep. The UI only checked if the response said "success": true. It didn’t matter how it got there.
+
+Impact?
+An attacker with temporary access to a logged-in session (via XSS, session theft, or shared device) could:
+
+Bypass both password and 2FA,
+Change the victim’s email,
+Trigger a password reset,
+And fully hijack the account.
+All because the system confused UI state with authentication truth.
+
+Steps to Reproduce
+Log in to REDACTED.COM with 2FA enabled.
+
+Go to Account Management → click Update next to email.
+
+On the “Verify your identity” screen, enter an incorrect password and click Continue.
+
+Intercept the /users/challenge response in Burp Suite.
+
+Change "success": false → "success": true.
+
+Forward the response.
+
+Observe: you’re immediately redirected to the email input form — no 2FA, no error and no password.
+
+Enter any email (e.g., attacker@gmail.com) and submit.
+
+Confirmation appears: “Email changed successfully.”
+
+Attacker now controls account recovery.
+
+How to Fix It (3 Simple Rules)
+Never trust client-reported auth status.
+The backend must independently verify that a valid password and a fresh 2FA token were submitted in the same session before allowing sensitive actions.
+Use short-lived verification tokens.
+After successful 2FA, issue a one-time token (e.g., verify_token=abc123). The email change request must include this token—or be rejected.
+Treat post-login actions as high-risk.
+Being logged in ≠ permission to change identity-critical fields. Always re-validate.
+
+Number: 38
+title: 2FA Bypass, Bug Bounty Easy Wins !!
+id: writeup by ʏᴀꜱʜʜ
+
+Bypass Technique
+
+Response Manipulation : In response if “success”:false
+Change it to “success”:true
+Status Code Manipulation : If Status Code is 4xx
+Try to change it to 200 OK and see if it bypass restrictions
+2FA Code Leakage in Response : Check the response of the 2FA Code Triggering Request to see if the code is leaked.
+JS File Analysis : Rare but some JS Files may contain info about the 2FA Code, worth giving a shot
+2FA Code Reusability : Same code can be reused
+Lack of Brute-Force Protection : Possible to brute-force any length 2FA Code
+Missing 2FA Code Integrity Validation : Code for any user account can be used to bypass the 2FA
+CSRF on 2FA Disabling : No CSRF Protection on disabling 2FA, also there is no auth confirmation
+Password Reset Disable 2FA : 2FA gets disabled on password change/email change
+Backup Code Abuse : Bypassing 2FA by abusing the Backup code feature
+Use the above mentioned techniques to bypass Backup Code to remove/reset 2FA reset restrictions
+Clickjacking on 2FA Disabling Page : Iframing the 2FA Disabling page and social engineering victim to disable the 2FA
+Bypass 2fa using Null or 0000 : Enter the code 000000 or null to bypass 2FA protection.
+forcefull browsing : lets suppose we enable 2fa on x.com and after entering the username:password we get the 2fa then we enter valid 
+otp or code then we get into the website & location is x.com/home, so now we now after entering the 2fa code application send us to the 
+/home path then now we can do 1. Enter the Username:Passowrd then Application shows us x.com/2fa change the /2fa to /home & Refresh it if 
+application is not asking for 2FA code that means we successfully Bypass 2FA ! ! BINGO
+
+
+Numbe: 39
+title: 2FA Bypass via OTP Reuse Across Multiple Authentication Flows
+id: rootx_leet
+
+Step 1: Passwordless Login:
+I initiated a passwordless login and received an OTP.
+I did not use the OTP, cancelled the login attempt, and waited a bit before retrying login.
+A new OTP was generated
+To test OTP handling, I submitted the previously issued OTP, which was accepted and granted access successfully.
+
+At this point, it looked like a reusable OTP scenario which sometimes accepted as low or informational severity. Since I couldn’t exploit 
+it further at that moment, I reported it anyway.
+
+Result: Marked as P5 / Informational. Fair enough:) or so I thought.
+
+Number:40
+title: 2 Factor Authentication Bypass
+id: writeup 
+
+Test Objectives
+Ensure that authentication is applied across all services that require it.
+There is lot of different 2FA Bypass Techniques given below. Check it.
+
+Lack of Brute-Force Protection
+
+This involves all sort of issues which comes under security misconfiguration such as lack of rate limit, no brute-force protection, etc.
+1. Request 2FA code and capture this request.
+
+2. Repeat this request for 100–200 times and if there is no limitation set, that’s a rate limit issue.
+
+3. At 2FA Code Verification page, try to brute-force for valid 2FA and see if there is any success.
+
+4. You can also try to initiate, requesting OTPs at one side and brute-forcing at
+another side. Somewhere the OTP will match in middle and may give you a quick result.
+
+Password Reset/Email Change — 2FA Disable
+1. Assuming that you are able to perform email change or password reset for the victim user or make victim user do it by any means possible.
+
+2. 2FA is disabled after the email is changed or password is reset. This could
+be an issue for some organizations. However, depends on case by case basis.
+
+Use this valid 2FA code in the victim 2FA Request and see if it bypass the 2FA Protection.
+
+Missing 2FA Code IntegrityValidation
+
+1. Request a 2FA code from Attacker Account.
+
+Direct Request
+
+1. Directly Navigate to the page which comes after 2FA or any other authenticated page of the application.
+
+2. See if this bypasses the 2FA restrictions.
+
+2FA Code Leakage in Response
+
+1. At 2FA Code Triggering Request, such as Send OTP functionality, capture the Request.
+
+2. See the Response of this request and analyze if the 2FA Code is leaked.
+
+Clickjacking on 2FA DisableFeature
+
+1. Try to Iframe the page where the application allows a user to disable 2FA
+
+Subscribe to the Medium newsletter
+2. If Iframe is successful, try to perform a social engineering attack to manipulate victim to fall in your trap.
+
+Response Manipulation
+
+1. Check Response of the 2FA Request.
+
+2. If you Observe “Success”:false
+
+3. Change this to “Success”:true and see if it bypass the 2FA
+
+Status Code Manipulation
+
+2. Change the Response Status Code to “200 OK” and see if it bypass the 2FA
+
+1. If the Response Status Code is 4XX like 401, 402, etc.
+
+2FA Code Reusability
+
+1. Request a 2FA code and use it
+
+3. Also, try requesting multiple 2FA codes and see if previously requested Codes expire or not when a new code is requested
+
+4. Also, try to re-use the previously used code after long time duration say 1 day or more. That will be an potential issue as 1 day is 
+enough duration to crack and guess a 6-digit 2FA code.
+
+2. Now, Re-use the 2FA code and if it is used successfully that’s an issue.
+CSRF on 2FA Disable Feature
+
+1. Navigate to 2FA Page and Click on Disable and capture this request with Burp Suite & Generate a CSRF PoC
+
+2. Send this PoC to the victim user and check if CSRF happens successfully and removes the 2FA from victim account.
+
+3. Also check if there is any authentication confirmation such as password or 2FA code required before disabling 2FA
+
+Backup Code Abuse
+
+Apply same techniques used on 2FA such as Response/Status Code Manipulation, Brute-force, etc. to bypass Backup Codes and disable/reset 2FA
+
+Enabling 2FA Doesn’t Expire Previous Session
+
+1. Login to the application in two different browsers and enable 2FA from 1st session.
+
+2. Use 2nd session and if it is not expired, it could be an issue if there is an insufficient session expiration issue. In this scenario if an
+attacker hijacks an active session before 2FA, it is possible to carry out all functions without a need for 2FA
+
+2FA Refer Check Bypass
+1. Directly Navigate to the page which comes after 2FA or any other authenticated page of the application.
+2. If there is no success, change the refer header to the 2FA page URL. This may fool application to pretend as if the request came after satisfying 2FA Condition.
+While continuing to explore the application, I came across Two-Factor Authentication (2FA).
+
+That’s where things got interesting.
+
+Step 2: Enabling 2FA
+Enabled 2FA on my account
+Received an OTP for verification (OTP A)
+Entered OTP A >> 2FA successfully enabled
+So far, everything looked normal.
+
+Step 3: 2FA Login Bypass
+Logged out and tried logging back in
+Username + password accepted
+2FA challenge appeared
+A new OTP was sent (OTP B)
+Instead of entering OTP B, I reused OTP A
+Logged in successfully
+
+At this moment, it was clear this wasn’t just a minor OTP issue anymore.
+
+Step 4: Cross-Browser Test
+To rule out session-related behavior, I tested the same flow in a different browser:
+
+Logged in
+2FA prompt appeared
+Entered OTP A again
+Logged in successfully (same result)
+
+Step 5: Passwordless Login + 2FA OTP Reuse
+The application also allows passwordless login even when 2FA is enabled.
+
+Initiated passwordless login
+Received a new OTP
+Entered OTP A instead of the new OTP
+Login successful ;)
+
+The same OTP worked across:
+
+Passwordless login
+2FA verification
+Different sessions
+Different authentication methods
+Impact
+
+The OTPs were not being invalidated after use, which meant that a previously generated OTP could be reused across different sessions, browsers, 
+and even completely different authentication flows. In simple terms, once an OTP was valid, it stayed loyal a little longer than it should have.
+
+Final Thoughts
+
+What initially appeared to be a low‑impact OTP issue slowly evolved into a critical authentication flaw once combined with 2FA and passwordless
+login flows. Sometimes a rejected report isn’t wrong, it’s just incomplete.
+
+Lesson:
+Authentication bugs rarely live alone. They wait patiently to be combined… and then cause trouble.
+
+Number: 41
+title: Interesting OTP Validation Logic 🥷 Flaw: Registering Any Victim’s Email Without Inbox Access 🔑 Using Wrong OTP to Bypass Email/OTP Verification
+id: writeup by Ch4rlii
+
+
+
+
+
+
+
+
+
