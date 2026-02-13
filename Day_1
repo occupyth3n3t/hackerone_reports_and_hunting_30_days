@@ -2685,8 +2685,404 @@ Number: 41
 title: Interesting OTP Validation Logic 🥷 Flaw: Registering Any Victim’s Email Without Inbox Access 🔑 Using Wrong OTP to Bypass Email/OTP Verification
 id: writeup by Ch4rlii
 
+Category:- CWE-287: Improper Authentication + CWE-840: Business Logic Error
+Severity: Medium (P3)
+
+The normal registration flow of the application was something like this:
+
+Navigate to the registration page → Enter your email address → A 4-digit OTP is sent to the provided email → Enter the OTP on the second page to verify the email → After successful OTP verification, proceed to the third page to set a username and password → Once credentials are created, access to the account is granted.
+
+My Test Case:
+As part of my testing, I entered my own email address on the registration page and received a 4-digit OTP in my inbox. I entered the OTP on the second page, clicked “Verify Email”, and captured the request using Burp Proxy.
+
+When analyzing the OTP request, I noticed that the request body did not contain any parameter for the email address. This indicated that the application was not verifying which email the OTP actually belonged to. Instead, the validation was only dependent on the active session and tokens. I noted this behavior for further investigation.
+
+POST /registration/verify HTTP/2
+Host: user.example.com
+Cookie:  .
+         .
+         . ## Session tokens and Others Cookies 
+         .
+         .
+
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0
+Accept: text/javascript, application/javascript, application/ecmascript, application/x-ecmascript, /; q=0.01
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Referer: https://user.example.com/registration/verify
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+X-Requested-With: XMLHttpRequest
+X-Csrf-Token: SaomsCSCSA835adaeeEn4yfgIrE1PTFnrAnEHRFS3SM0ukdjVz6JTRB2LHPZSnhMwWafh3e83453cebsa
+Content-Length: 169
+Origin: https://user.example.com
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Te: trailers
+
+authenticity_token=SaomsCSCSA835adaeeEn4yfgIrE1PTFnrAnEHRFS3SM0ukdjVz6JTRB2LHPZSnhMwWafh3e83453cebsa&code1=1&code2=8&code3=5&code4=1&code=1851&commit=Verify email
+Next, I analyzed the response of a valid OTP request. The response contained two important headers and a redirect script that redirected users to the sign-up page upon successful verification:
+
+## Valid OTP Response
+
+HTTP/2 200 OK
+Date: Fri, 1 Aug 2025 07:56:59 GMT
+Content-Type: text/javascript; charset=utf-8
+Location: https://user.example.com/auth/sign_up
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self' https:; font-src 'self' https: data:; img-src 'self' https: data:; object-src 'none'; script-src 'self' https: 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; frame-ancestors 'self' https: https://next.example.com
+Etag: W/"9db3206f14e758ac3a8f209d7e1b46c2"
+Pragma: no-cache
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: xxx_session=7fb41dce902a3b6e5c0d19f27aa8e54c; domain=.example.com; path=/; expires=Mon, 10 Aug 2025 07:56:59 GMT; secure; HttpOnly; SameSite=Lax
+Set-Cookie: xxx_session_refresh=; path=/; max-age=0; expires=Thu,00:00:00 GMT; SameSite=Lax; secure; HttpOnly
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Vary: Origin
+X-Content-Type-Options: nosniff
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-Request-Id: 51eac97f08329de46f0b34a2cd19b87a
+X-Runtime: 0.023491
+X-Xhr-Redirect: https://user.example.com/auth/sign_up
+X-Xss-Protection: 1; mode=block
+Cf-Cache-Status: DYNAMIC
+Server: cloudflare
+Cf-Ray: 1507d0e47b194652-BOM
+
+Turbolinks.clearCache()
+Turbolinks.visit("https://user.example.com/auth/sign_up", {"action":"advance"})
+1:- Location: https://user.example.com/auth/sign_up
+
+2:- X-Xhr-Redirect: https://user.example.com/auth/sign_up
+The script looked like this:
+
+Turbolinks.clearCache();
+Turbolinks.visit("https://user.example.com/auth/sign_up", {"action":"advance"});
+I saved these values for later use😁.
 
 
+To exploit the logic flaw, I dropped the response of the valid OTP request and refreshed the browser. After the refresh, the application redirected me back to the registration page. This time, instead of my own email, I entered the victim’s email address (to which I had no access). Since I did not have access to the victim’s mailbox, I simply used a random 4-digit OTP (e.g., 1111) and intercepted this request.
+
+While analyzing the response of this invalid OTP request, I noticed that the request was still using the same cookies and session tokens from my previously valid OTP session, even though I had entered a different email address. Normally, when a wrong OTP is entered, the application redirects back to the first page and asks the user to re-enter the email and validate the OTP again — but here I modified the response.
+
+## Wrong OTP Response
+
+HTTP/2 200 OK
+Date: Fri, 1 Aug 2025 07:56:59 GMT
+Content-Type: text/javascript; charset=utf-8
+Location: https://user.example.com/registration/verfiy
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self' https:; font-src 'self' https: data:; img-src 'self' https: data:; object-src 'none'; script-src 'self' https: 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; frame-ancestors 'self' https: https://next.example.com
+Etag: W/"9db3206f14e758ac3a8f209d7e1b46c2"
+Pragma: no-cache
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: xxx_session=7fb41dce902a3b6e5c0d19f27aa8e54c; domain=.example.com; path=/; expires=Mon, 10 Aug 2025 07:56:59 GMT; secure; HttpOnly; SameSite=Lax
+Set-Cookie: xxx_session_refresh=; path=/; max-age=0; expires=Thu,00:00:00 GMT; SameSite=Lax; secure; HttpOnly
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Vary: Origin
+X-Content-Type-Options: nosniff
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-Request-Id: c138e0a47fd26b93a50c79d1ee42fa69
+X-Runtime: 0.023491
+X-Xhr-Redirect: https://user.example.com/registration/verfiy
+X-Xss-Protection: 1; mode=block
+Cf-Cache-Status: DYNAMIC
+Server: cloudflare
+Cf-Ray: 1507d0e47b194652-BOM
+
+Turbolinks.clearCache()
+Turbolinks.visit("https://user.example.com/registration/verfiy", {"action":"replace"})
+I replaced the two redirect headers and the redirect script in the invalid OTP response with the ones from the valid OTP response. After forwarding this modified response, the browser redirected me to the username and password setup page.
+
+Download the Medium app
+Although a pop-up appeared saying “Invalid verification code, please try again”, I ignored it, completed the username/password setup, clicked “Create Account”, and was redirected to the account settings page to set up 2FA. I successfully completed the setup using my mobile device.
+
+Note: Normally, if a wrong OTP is entered during registration, the application redirects back to the second page and asks the user to re-enter the correct OTP. But if an attacker exploits this logic flaw, they get redirected straight to the third page, where the application allows them to set a username and password. On that third page, a message still appears saying the OTP was invalid — meaning the Backend / Server is checking the OTP after the redirection. It’s like the Backend / Server is saying: “Sorry 😔 I checked the OTP a bit too late.” 😆
+
+
+Normal Validation Flow
+Key Observation👀:
+
+I also noted another important point: if you first enter the victim’s email and submit a wrong OTP, then try to convert that response into a valid OTP response and forward it, the attack does not work — the application still asks for the correct OTP. However, if you first enter your own email as an attacker, capture and drop the request/response of the OTP you receive, then refresh the browser and enter the victim’s email, and only then use this logic flow, the vulnerability can be exploited successfully. In other words, the bypass works only in this sequence and not by simply modifying a wrong OTP response.
+
+Press enter or click to view image in full size
+
+Logic Flaw On OTP Validation
+Thus, I was able to register an account using the victim’s email without access to their inbox or the actual OTP. The victim remained completely unaware, while an attacker could silently abuse this OTP validation logic flaw to create and control accounts with arbitrary email addresses.
+
+🌱 Root Cause of the Vulnerability:
+This vulnerability exists due to improper binding between the OTP, the email address it was generated for, and the server-side session that handles the registration process. During user registration, when an OTP is requested, it is tied only to the active session via a session cookie and authenticity token — not directly or securely bound to the specific email address submitted.
+
+When the attacker enters their own email address and completes OTP verification successfully, the server responds with redirection headers (Location, X-Xhr-Redirect) and a frontend navigation script (Turbolinks.visit(…)) that advance the user to the account setup stage. If the attacker intercepts and saves this response, and then drops the request (so that account creation is not completed), the session remains active in the browser, still marked as “OTP verified.”
+
+Later, the attacker refreshes the page or clicks a reference button in the browser and attempts to register a new account using a different email address, such as a victim’s. The server issues a new OTP to the victim’s email, but the attacker enters a random or incorrect OTP. At this point, instead of letting the invalid attempt proceed, the attacker intercepts the OTP verification response and modifies it by injecting the previously captured redirect headers and Turbolinks script from the valid session. Because the same session token and cookie are still active, the backend assumes the session is already verified — and does not check whether the OTP being submitted actually belongs to the new (victim) email address.
+
+The frontend then blindly follows the spoofed redirection instructions, allowing the attacker to proceed to the password and username setup stage for the victim’s email. The attacker can now complete the account creation on behalf of the victim and even enable 2FA. Since the real user never receives or verifies the OTP, they are unaware that an account has been created using their email. In the future, when they try to register or reset their password, they will be blocked at the 2FA screen — which only the attacker can control.
+
+I: The vulnerability stems from several combined issues:
+II: Session-level OTP trust without strict email binding
+III: Lack of session re-initialization between registration attempts
+IV: Frontend trust in redirect headers and scripts
+V: No revalidation of OTP/email match during account creation
+These flaws together allow a complete bypass of the OTP verification step.
+
+So, I successfully created a report for this bug, calculated the CVSS score, and forwarded it to the company.
+
+Number: 42
+title: How a Simple “Having Issue?” Feature Opened the Entire Server ?
+id: writeup
+
+The Backstory
+During a freelance Vulnerability Assessment and Penetration Testing (VAPT) engagement, I was tasked with testing a web application belonging to a well-known banking platform.
+
+There are moments during a security assessment when everything feels routine. The application behaves as expected, the controls seem mature, and most of the obvious attack surfaces appear hardened.
+
+Following a Real User Journey
+Let’s get started
+To properly understand the behavior of the website, I logged in as a normal user, with no special privileges and no elevated roles.
+
+From the dashboard, I initiated a standard fund transfer. The process was exactly what you would expect from a banking application:
+
+I selected a source account, entered a destination account, specified an amount, provided the transaction PIN, and submitted the request.
+
+Once the transaction was processed, the application responded in one of only two ways:
+
+Either the payment succeeded, or it failed.
+
+This part was straightforward.
+
+What caught my attention was what happened next.
+
+The “Having Issue?” Button
+Regardless of whether the transaction succeeded or failed, the interface displayed a small option labeled:
+
+“Having Issue?”
+
+At first glance, this looked like a harmless customer-support feature. Something designed to improve user experience by allowing customers to report transaction-related problems.
+
+Clicking it opened a panel on the left side of the screen.
+
+Inside this panel, the user could submit details such as:
+
+A description of the issue
+The amount involved
+The issue category
+And crucially…
+
+There was an option to upload files → Screenshots. Proof. Supporting documents.
+
+From a usability standpoint, this made sense.
+From a security standpoint, it immediately raised questions.
+
+Observing the File Upload
+The request was sent to the following endpoint:
+
+POST /api/upload-document
+Host: [REDACTED]
+Content-Type: multipart/form-data
+The content type was multipart/form-data, as expected.
+
+Nothing unusual so far.
+
+But the response was far more interesting than the request.
+
+A Response That Revealed Too Much
+The server responded with a JSON object containing detailed metadata about the uploaded file. Among the fields returned were internal identifiers, file type information, and a direct URL path referencing the uploaded document.
+
+Press enter or click to view image in full size
+
+One field stood out immediately:
+
+This response leaked a direct download endpoint.
+
+"fileUrl": "/api/upload-document/downloadDocs?fileName=468074212.paymentfailed.png"
+This was a moment worth pausing on.
+
+The backend was not only accepting user uploads, but it was also explicitly telling the client how to download them.
+
+Testing the Download Endpoint
+I copied the file URL from the response and accessed it directly in the browser:
+
+Join The Writer's Circle event
+By accessing the FileUrl directly:
+
+https://[REDACTED]/api/upload-document/downloadDocs?fileName=468074212.paymentfailed.png
+I was able to download the uploaded file without any authentication checks.
+
+That alone is a Broken Access Control issue.
+
+But it didn’t stop there.
+
+At this point, the issue was already significant. But curiosity and experience suggested testing further.
+
+The Moment Everything Changed
+Whenever a backend exposes a file download mechanism that relies on user-supplied input, one question must always be asked:
+
+What happens if the input is not a filename?
+
+So I modified the request.
+
+Instead of providing the name of an uploaded file, I supplied a path traversal payload.
+
+GET /api/upload-document/downloadDocs?fileName=../../../../../../etc/passwd
+I sent the request.
+
+The server responded.
+
+
+At that moment, it became clear that this was not just a misconfiguration or a minor oversight. This was a full-fledged arbitrary file read vulnerability in a production banking environment.
+
+Exploring the Filesystem by Path Traversal
+To confirm the extent of access, I tested additional files.
+
+System-level files were accessible.
+Configuration files were accessible.
+Most alarmingly, files associated with containerized infrastructure were accessible.
+One such example was:
+
+/var/run/secrets/kubernetes.io/serviceaccount/token
+The successful retrieval of this file confirmed that the application was running inside a Kubernetes cluster and that the backend service account token was 
+readable through this endpoint.
+
+This dramatically increased the impact of the vulnerability.
+
+What began as a customer support feature had now exposed the underlying infrastructure layer.
+
+Beyond File Read
+With access to sensitive system files and Kubernetes secrets, the attack surface expanded dramatically.
+
+Configuration data reveals how applications are deployed.
+Service account tokens reveal how workloads authenticate internally.
+Internal file paths reveal runtime behavior.
+
+By chaining this information, it became possible to move far beyond simple file disclosure.
+
+This vulnerability could be escalated into full Remote Code Execution.
+
+That full chain deserves its own dedicated write-up and it will get one.
+
+Closing Thoughts
+Sometimes, the path to the most critical impact starts with a button that simply says:
+
+“Having Issue?”
+
+Number: 43
+title :  EMAIL change without password and 2FA (Response Manipulation Simple BUG)
+id: 
+The Mindset: Chill, Curious, and Slightly Annoyed by “Secure” Theater
+I don’t chase CVEs. I don’t race to be first. I’m just a beginner in bug bounty who likes asking: “What if this isn’t as solid as it looks?”
+
+Also, full disclosure:
+
+I once tried logging in with a password made of 10 Zero Width Spaces (U+200B).
+The system accepted it, reset my password, and emailed me a confirmation that literally said:
+“Your new password is:<space>”
+
+Me, staring into the void: “Ah. So we’re doing interpretive dance security now.”
+
+That’s the thing about invisible characters — they’re not just for blank WhatsApp messages (shoutout to blanktext.net ). Sometimes, they reveal how little a system actually validates what you give it.
+
+But this story isn’t about Unicode. It’s about something even simpler: a single JSON field that lied — and the server believed it.
+
+The Discovery: “Verify Your Identity”… Or Just Pretend To?
+I started where most do: testing password reset flows, 2FA bypasses on login, token reuse. Nothing worked — REDACTED.COM had locked down the front door properly.
+
+So I moved inward.
+
+After logging in (with 2FA enabled), I went to Account Settings → clicked “Update” next to my email. The page responded with:
+
+“First, verify your identity.”
+→ Password field
+→ 2FA prompt
+
+Perfect. That’s how it should be.
+
+But instead of entering my real password, I typed “wrongpass” and hit Continue.
+
+In Burp Suite, I saw the request to /users/challenge return:
+
+{ “success”: false, “errorCode”: “invalid-credentials” }
+
+Expected. Boring.
+
+Then — because I’ve seen too many apps trust the client — I changed it to:
+
+{ “success”: true, “errorCode”: “” }
+
+I forwarded the response.
+
+And instead of an error like “Password required” or “2FA code invalid”…
+I was instantly redirected to the “Enter your new email” page.
+
+No challenge. No code. No second thought.
+
+I typed attacker@gmail.com, clicked Change Email, and got:
+✅ “Email updated successfully.”
+
+I hadn’t proven anything. But the app acted like I’d passed every test.
+
+The Vulnerability: When the Frontend Lies and the Backend Nods
+This was a critical post-authentication bypass.REDACTED.COM enforced password + 2FA on the frontend, but the backend never validated whether the user had actually completed the verification before allowing the email change.
+
+Become a Medium member
+The /users/challenge endpoint was treated as a gate—but the gatekeeper was asleep. The UI only checked if the response said "success": true. It didn’t matter how it got there.
+
+Impact?
+An attacker with temporary access to a logged-in session (via XSS, session theft, or shared device) could:
+
+Bypass both password and 2FA,
+Change the victim’s email,
+Trigger a password reset,
+And fully hijack the account.
+All because the system confused UI state with authentication truth.
+
+Steps to Reproduce
+Log in to REDACTED.COM with 2FA enabled.
+
+Go to Account Management → click Update next to email.
+
+On the “Verify your identity” screen, enter an incorrect password and click Continue.
+
+Intercept the /users/challenge response in Burp Suite.
+
+Change "success": false → "success": true.
+
+Forward the response.
+
+Observe: you’re immediately redirected to the email input form — no 2FA, no error and no password.
+
+Enter any email (e.g., attacker@gmail.com) and submit.
+
+Confirmation appears: “Email changed successfully.”
+
+Attacker now controls account recovery.
+
+How to Fix It (3 Simple Rules)
+Never trust client-reported auth status.
+The backend must independently verify that a valid password and a fresh 2FA token were submitted in the same session before allowing sensitive actions.
+Use short-lived verification tokens.
+After successful 2FA, issue a one-time token (e.g., verify_token=abc123). The email change request must include this token—or be rejected.
+Treat post-login actions as high-risk.
+Being logged in ≠ permission to change identity-critical fields. Always re-validate.
+Final Thoughts
+I didn’t need a memory corruption exploit or a side-channel leak.
+I just needed one mutable boolean — and a system that trusted it too much.
+
+This bug wasn’t hidden in complexity. It was hiding in complacency: the assumption that “if the user is logged in, they’ve already proven who they are.”
+
+But identity isn’t a one-time event. It’s a continuous contract. And if you don’t enforce it on the server, you’re not securing accounts — you’re staging a play.
+
+I reported this responsibly. REDACTED.COM patched it quickly.
+And I went back to testing whether U+3164 (Hangul Filler) can crash a login form.
+
+Because in security, the quietest bugs don’t scream.
+They just sit there… invisible… waiting for someone to ask:
+
+Number: 45
+id: 
 
 
 
