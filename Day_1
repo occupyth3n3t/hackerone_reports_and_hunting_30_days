@@ -3081,11 +3081,278 @@ And I went back to testing whether U+3164 (Hangul Filler) can crash a login form
 Because in security, the quietest bugs don’t scream.
 They just sit there… invisible… waiting for someone to ask:
 
-Number: 45
-id: 
+Number: 51
+Title: Business Logic Vulnerability lead to PII theft & account take over
+id: Writeup by zack0x01
+
+The logic of the app is easy : if the user is registered ( have an account ) , whne you go to make a purchase as a guest user , 
+it shows “sorry this user already exist you need to login first “ , but if you use an email that have never registered befor you
+can make an order as a guest user
+
+Here’s how it works 👇
+
+The victim places an order as a guest using their email address.
+Once the order is complete, the attacker creates a new account using that same victim email address.
+Because the application does not verify email ownership, the newly created account gets linked to the victim’s existing guest order.
+The attacker can now see the victim’s order details, including sensitive PII such as name, phone number, and address.
+Additionally, the attacker can modify account details, effectively taking over the victim’s account.
+If you try to make a purchase using another already registered account, the system correctly prompts you to log in first — meaning this behavior only affects guest 
+checkout users, which makes it a clear authorization issue caused by improper business logic handling.
+
+This type of bug can have a high impact since it allows an attacker to access private user data and control over accounts without any interaction from the victim.
+
+Impact:
+Full Account Takeover
+PII Disclosure (Name, Email, Address, Phone Number)
+
+Number: 52
+Title: Gogs Vulnerable to 2FA Bypass via Recovery Code
+id: Github's Writeup by GPT Security Team
+
+Vulnerability Details
+The function UseRecoveryCode in internal/database/two_factor.go fails to check that the recovery code belongs to the authenticating user. Instead, it looks for any unused 
+recovery code:
+Vulnerable Code Snippet
+
+func UseRecoveryCode(_ int64, code string) error {
+    recoveryCode := new(TwoFactorRecoveryCode)
+    has, err := x.Where("code = ?", code).And("is_used = ?", false).Get(recoveryCode)
+    ...
+}
+Although the caller passes userID, it is ignored. The result is a global lookup for any unused code, allowing an attacker to submit their own recovery 
+code during another user's login flow.
+
+Impact
+2FA rendered ineffective for all users
+Realistic Exploitation Scenarios
+Public Gogs instances with 2FA enabled
+Developer or maintainer accounts
+Enterprise self-hosted Gogs servers
+Potential Impact
+This vulnerability critically undermines 2FA. Since recovery codes are not globally unique and lack user scoping, any attacker with victim credentials can
+use one of their own recovery codes to complete login as the victim — bypassing all 2FA protections. This opens the door to account hijacking, data exfiltration, 
+and downstream supply chain compromise.
+Timeline
+August 2025: Discovered via GPT5
+August 2025: Reproduced and confirmed via PoC and sanitizer
+Aug 6, 2025 - Sent to Gogs via https://github.com/gogs/gogs/security/advisories/new
+
+Number: 53
+Title: Leaking CSRF token over HTTP resulting in CSRF protection bypass
+id: Hockerone 15412
+
+Start a proxy tool like Burp.
+Authenticate to the Coinbase application.
+Navigate to the URL https://coinbase.com/docs/api/overview
+Under Developer Updates, enter your email address and click "Subscribe".
+Notice that this request is sent over HTTP with the CSRF token in the body of the POST request.
+This means that an attacker can easily perform a MiTM attack and gain access to this CSRF token. The attacker can then trick this authenticated Coinbase user to 
+perform CSRF attacks since the attacker now knows the CSRF token associated with this user. 
+This results in bypassing the existing CSRF protection in the Coinbase application.
+
+Number: 54
+Title: Organization Admin Privilege Escalation To Owner
+id: Hackerone 272570
+
+Summary
+It seems there is an issue with your roles which allows an admin to escalate his own privileges to owner and takeover the organization.
+Reproduce
+Create an account, accountA
+Create another account, accountB
+Create an organization under accountA and invite accountB to that organization as admin
+Accept invitation with accountB and log out
+Confirm accountB for the organization on accountA
+Log in with accountB
+Navigate to the organization -> invite users -> edit accountB user and change to owner
+See that the change worked and accountB is now owner.
+To proceed with organization takeover, remove the original owner
+Note that (after login and logout) the original owner no longer is in the organization
+Impact
+Anyone who is an admin on an organization can take total control of the organization and kick the original owner out.
+Request
+Could you please whitelist ip 173.167.43.57 and ip 54.197.209.98 so that I can keep reporting? It is very hard to fully test the application while I am constantly 
+getting blacklisted and having to use my phone as a hotspot :P If not, that's cool, just figured I'd ask :)
+Thanks,
+Justin Gardner
+
+Number: 55
+Title: [Privilege Escalation] Authenticated users can manipulate others fullname without their knowledge 
+id: 244567
+
+Summary
+I have found a vulnerability, Which is you can change/update others Fullname without there knowledge.
+Step-by-step Reproduction Instructions
+1.) login your account https://wakatime.com/login
+2.) after you login go to Leaderboard then click Create new one or in easy way is to go here https://wakatime.com/leaders/new
+3.) Now put any name you want e.g. Test then hit Ceate Leaderboard
+4.) Then you will see Leaderboards · Test · Notifications or notification page, something like that, then just click Daily
+5.) Go to Members Panel and invite other users. just fill the fullname any name you want e.g. test then fill up the target email e.g. ██████@gmail.com then hit Send Invitation
+6.) after you do step 5. you will see the inviteded victim in Members panel
+7.) You will notice the Edit Icon on the Victim fullname, Click that.
+8.) Them prompt box will pop up saying Enter new name for Test, then just put the Fullname in input a value e.g. HACKED.
+9.) Now go login the victim email, and you will notice that the fullname of the victim was change into HACKED
 
 
 
+Number: 56
+Title: Non-secure requests are not automatically upgraded to HTTPS
+ID: 158186
+
+Non-secure requests to hackerone.com (e.g. http://hackerone.com) are not automatically upgraded to HTTPS. This is not something you would notice when 
+you use the latest version of modern web browsers such as Google Chrome or Firefox, because hackerone.com is HSTS preloaded. When a domain is preloaded,
+non-secure requests for these domains are internally upgraded to HTTPS. However, there are still browsers 
+that either haven't implemented HSTS preload lists, or don't have hackerone.com on their HSTS preload lists (yet).
+Take for example Safari on iOS, which doesn't have hackerone.com in its HSTS preload list. When you open http://hackerone.com in Safari and head over to 
+the 'Sign in' page you will see that the connection is not upgraded to HTTPS. Moreover, if you enter your username and password, and hit 'Sign in', the form
+is sent in the clear over a non-secure connection.
+Since non-secure requests aren't upgraded to HTTPS, the user will never receive instructions (via the Strict-Transport-Security header) to set the HSTS "cookie"
+for 'hackerone.com. Which means a secure connection is not enforce until the first time the requests a resource over HTTPS, because that response will include the
+Strict-Transport-Security` header.
+Steps to reproduce
+cURL
+Send a HEAD request to http://hackerone.com: curl -I http://hackerone.com.
+You will see that the server does not instruct the client to upgrade the connection to HTTPS. The server responds with a 200 OK status code instead of 301 status
+code with the response header Location set to https://hackerone.com.
+Firefox
+Clear the Site Preferences: Click History --> Clear Recent History..., select Everything, tickSite Preferences, and hit Clear Now. This is to ensure Firefox forgets
+about an HSTS settings for hackerone.com.
+Turn off the use of the HSTS preload list. Set network.stricttransportsecurity.preloadlistto false on the about:config page.
+Open http://hackerone.com.
+You will see that the non-secure connection is not upgraded to HTTPS.
+Also note that when you click Sign in in the top-right corner, enter your email address and password, and hit the green Sign in button that your credentials are sent
+in the clear to the non-secure endpoint http://hackerone.com/sessions.
+Exploitability and impact
+Granted, it is kind of hard to exploit this vulnerability, because, first of all, it requires an attacker to be in a privileged network (he/she needs to be able to see
+what's going over the wire). Then the attacker would need to trick the victim into opening http://hackerone.com in a browser that doesn't have hackerone.com HSTS preloaded
+and which doesn't have any HSTS cookies for hackerone.com from a previous secure visit to hackerone.com. When all these conditions are met, an attacker could for example
+steal the victim's HackerOne credentials, or inject some malicious scripts into any page. This is possible because the connection is never upgraded, and the site allows
+forms such as the login form to be posted to a non-secure endpoint (see the screenshot attached to this report).
+Mitigation
+Non-secure connections need to be upgraded to HTTPS as soon as possible using a permanent redirect. But since the website allowed me to send my username and password in the
+clear over a non-secure connection, I was also thinking that you would probably want to prevent forms from being posted to non-secure origins. One possibility is to enforce 
+the client to only send AJAX requests to secure origins using the Content Security Policy connect-src directive.
+
+Number: 57
+Title: privilege escalation
+ID: 13959
+
+niks submitted a report to Automattic.
+May 29, 2014, 9:09am UTC
+This vulnerability includes privileges escalation, authentication bypass, as well as some information disclosure as well. follow the below steps for reproduction.
+go to https://cloudup.com and make two accounts say X and Y.
+login with the account X and upload a file(can be txt,php,anything) and set a password for this file, now right click on download and copy the link location of the file.
+It is something like (https://cloudup.com/files/iDQ23wk5p1O/download)
+Now logout from account X, and login with account Y. Now load the link location of file copied in step 2. what you will get? Forbidden, right?
+But wait a second, modify the url mentioned in step 2 like below https://cloudup.com/files/iDQ23wk5p1O/ (remove the download part)
+Load the above modified url, and you will see, you can access the file contents i.e. password protected file (authentication bypass), accessed by another user who is not
+authorized (privilege escalation) and information disclosure like "exif":{"exiftool version number":"9.35","file name":"HiTmbEE-C2","directory":"/tmp/thumbs",
+"file size":"46 kB","file modification date time":"2014:05:29 08:37:22+00:00","file access date time":"2014:05:29 08:37:22+00:00","file inode change date 
+time":"2014:05:29 08:37:22+00:00","file permissions":"rw-rw-r--"
+ 
+posted a comment. 
+May 29, 2014, 9:20am UTC
+i am attaching poc of two files,
+cloudup1.jpg -> uploaded file was image having password protection
+cloudup2.jpg -> uploaded file was text file having password protection
+
+Number: 58
+Title: Login credentials transmitted in cleartext on index.rubygems.org
+ID:  #173268
+
+If someone links their target to http://index.rubygems.org then if they click "sign in" their credentials are transmitted plaintext as there is no https 
+redirect or enforcing of https on the login form.
+Step 1: Link to http://index.rubuygems.org
+Step 2: sniff traffic (open wifi / proxy / etc)
+See the following parameters POST to the session endpoint. The user is confronted with an error since the session cookie is marked secure so they can't 
+continue to logged in resources. But the attacker already has their username and password:
+Request captured.
+Code
+
+POST /session HTTP/1.1
+Host: index.rubygems.org
+User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: http://index.rubygems.org/sign_in
+Cookie: _gauges_unique_hour=1; _gauges_unique_day=1; _gauges_unique_month=1; _gauges_unique_year=1; _gauges_unique=1; _ga=GA1.2.406017651.1475277378
+DNT: 1
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+Pragma: no-cache
+Cache-Control: no-cache
+Post Data Captured:
+Code
+
+utf8=✓
+authenticity_token=9dML75aXwXcw4rqJlOeKDK2/SdRK78+5ciMEtrMbDgEf160r9v1TX0/pXynzDC+pYSp5M1oGLsmtvkixo+MfdA==
+session[who]=Eterm1
+session[password]=5[redacted]W
+commit=Sign+in
+Furthermore, _rubygems_session cookie is transmitted over http. It has a "secure" flag which stops the client resubmitting over http, but an attacker can see it clear
+in the response headers.
+
+Number: 59
+Title: Business Logic Vulnerability in Dell’s Payment API — Reported via Bugcrowd
+ID: Writeup 
+
+Vulnerability Summary
+
+We discovered that Dell's UPI payment processing API lacked proper validation of payment amounts. This allowed an attacker to alter the request payload 
+and manipulate the price reflected in the server's response — opening the door to financial inconsistencies and potential fraud.
+
+---
+
+Proof of Concept (PoC)
+
+We initiated a UPI payment with the following crafted payload:
+
+{
+"upiPaymentDetails": {
+"paymentId": "70f10e98-f618-4c25-ad3b-f1304f2371c3",
+"amount": 1.00,
+"payCode": "UPI"
+},
+"nonAppliedPayment": {
+"payCode": "UPI"
+},
+"paymentProcessType": "Register",
+"paymentCategoryName": "upi",
+"isPaymentAncillaryDataRequired": true
+}
+
+Server Response:
+
+{
+"upiPaymentDetails": {
+"amount": 1.00,
+"paymentId": "70f10e98-f618-4c25-ad3b-f1304f2371c3",
+"payCode": "UPI",
+...
+}
+}
+
+Even though a modified price was sent, Dell’s API accepted and responded with it. This created a logic flaw where amount tampering could occur without validation.
 
 
+Screenshot 1: Manipulated Price
+Press enter or click to view image in full size
 
+Screenshot 2: API Response with Altered Amount
+
+Screenshot 3: Payment Completion on Gateway
+---
+
+Write on Medium
+Impact
+
+This vulnerability posed significant risks:
+
+Financial Risk: Potential loss through price manipulation.
+
+Integrity Violation: ACID property (Consistency) was compromised.
+
+Reputation Risk: Errors in payment processes erode customer trust.
+
+Number: 60
+Tille: 
